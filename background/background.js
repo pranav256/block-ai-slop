@@ -9,6 +9,14 @@ const GITHUB_REMOTE_BLOCKLIST_URL = 'https://raw.githubusercontent.com/pranav256
 // Only compound generative phrases — never match standalone 'ai' as a topic!
 const DEFAULT_KEYWORDS = [
   "ai generated",
+  "ai-generated",
+  "ai drama",
+  "ai-drama",
+  "ai dub",
+  "ai dubbed",
+  "ai romance",
+  "ai series",
+  "ai recap",
   "ai video",
   "ai animation",
   "ai animated",
@@ -40,7 +48,26 @@ const DEFAULT_KEYWORDS = [
   "minimax",
   "hailuo",
   "suno ai",
-  "udio ai"
+  "udio ai",
+  "minidrama",
+  "mini drama",
+  "short drama",
+  "ai philosophy",
+  "ai stoic",
+  "ai stoicism",
+  "ai quotes",
+  "ai motivation",
+  "ai psychology",
+  "dark psychology ai",
+  "faceless channel",
+  "chatgpt stories",
+  "reddit ai",
+  "ai facts",
+  "cloned voice",
+  "deepfake voice",
+  "ai voice cover",
+  "text to speech",
+  "text-to-speech"
 ];
 
 const DEFAULT_SETTINGS = {
@@ -53,7 +80,7 @@ const DEFAULT_SETTINGS = {
   engineAudioScript: true,    // Engine 4
   blockSyntheticDisclosures: true,
   blockKeywords: true,
-  blockShorts: true,
+  blockShorts: false,         // FALSE by default: only AI slop shorts are blocked, human shorts stay
   placeholderMode: false,     // Clean AdBlock style (default)
   customKeywords: DEFAULT_KEYWORDS,
   blockedChannels: [],
@@ -94,9 +121,19 @@ chrome.runtime.onInstalled.addListener(async () => {
     }
   }
 
-  // Remove standalone 'ai' if present to prevent false positives on podcasts/interviews
-  if (Array.isArray(current.customKeywords)) {
-    toSet.customKeywords = current.customKeywords.filter(k => k.trim().toLowerCase() !== 'ai');
+  // Ensure new default keywords are merged so existing installs automatically receive updates
+  const existingKws = Array.isArray(current.customKeywords) ? current.customKeywords : [];
+  const mergedKws = [...existingKws];
+  for (const defKw of DEFAULT_KEYWORDS) {
+    if (!mergedKws.some(k => k.trim().toLowerCase() === defKw.toLowerCase())) {
+      mergedKws.push(defKw);
+    }
+  }
+  toSet.customKeywords = mergedKws.filter(k => k.trim().toLowerCase() !== 'ai');
+
+  // Fix shorts: do not blanket-block shorts unless user deliberately enabled it
+  if (current.blockShorts === undefined) {
+    toSet.blockShorts = false;
   }
 
   toSet.engineThumbnails = false;
@@ -154,6 +191,22 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   tabCounts.delete(tabId);
 });
 
+// Buffered stats accumulator to eliminate chrome.storage quota limits completely
+let pendingBlockedCount = 0;
+let statsFlushTimeout = null;
+
+function flushStats() {
+  if (pendingBlockedCount === 0) return;
+  const toAdd = pendingBlockedCount;
+  pendingBlockedCount = 0;
+
+  chrome.storage.local.get(['stats'], (data) => {
+    const stats = data.stats || { totalBlocked: 0 };
+    stats.totalBlocked = (stats.totalBlocked || 0) + toAdd;
+    chrome.storage.local.set({ stats });
+  });
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'videoBlocked' && sender.tab?.id) {
     const tabId = sender.tab.id;
@@ -165,11 +218,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       text: current > 0 ? String(current) : ''
     });
 
-    chrome.storage.sync.get('stats', (data) => {
-      const stats = data.stats || { totalBlocked: 0 };
-      stats.totalBlocked = (stats.totalBlocked || 0) + (message.count || 1);
-      chrome.storage.sync.set({ stats });
-    });
+    pendingBlockedCount += (message.count || 1);
+    if (!statsFlushTimeout) {
+      statsFlushTimeout = setTimeout(() => {
+        statsFlushTimeout = null;
+        flushStats();
+      }, 2500);
+    }
 
     sendResponse({ currentTabCount: current });
     return true;
