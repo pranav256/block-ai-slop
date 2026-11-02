@@ -572,3 +572,13 @@ input[type="text"]::placeholder {
   font-size: 11px;
   color: var(--text-muted);
 }
+/* Add tag-optional styling */
+.tag-optional {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 5px;
+  background-color: rgba(148, 163, 184, 0.15);
+  color: #94a3b8;
+  border-radius: 4px;
+  margin-left: 4px;
+}
