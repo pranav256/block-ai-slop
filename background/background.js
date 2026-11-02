@@ -1,6 +1,7 @@
 /**
- * NoSlop - Background Service Worker (v2.5)
+ * NoSlop - Background Service Worker (v2.6)
  * Handles storage initialization, badge counters, and centralized GitHub community blocklist sync.
+ * Large community databases (46k+ channels) are stored in chrome.storage.local.
  */
 
 const GITHUB_REMOTE_BLOCKLIST_URL = 'https://raw.githubusercontent.com/pranav256/block-ai-slop/main/community-blocklist.json';
@@ -56,13 +57,32 @@ const DEFAULT_SETTINGS = {
   placeholderMode: false,     // Clean AdBlock style (default)
   customKeywords: DEFAULT_KEYWORDS,
   blockedChannels: [],
-  remoteChannels: [],
-  remoteVideos: [],
-  lastCommunitySync: null,
   stats: {
     totalBlocked: 0
   }
 };
+
+async function ensureLocalBlocklist() {
+  try {
+    const localData = await chrome.storage.local.get(['remoteChannels']);
+    if (!localData.remoteChannels || localData.remoteChannels.length === 0) {
+      const res = await fetch(chrome.runtime.getURL('community-blocklist.json'));
+      if (res.ok) {
+        const json = await res.json();
+        if (json && Array.isArray(json.channels)) {
+          await chrome.storage.local.set({
+            remoteChannels: json.channels,
+            remoteVideos: json.videoIds || [],
+            lastCommunitySync: json.updatedAt || new Date().toISOString()
+          });
+          console.log(`[NoSlop Background] Loaded ${json.channels.length} bundled community channels into local storage.`);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[NoSlop Background] Bundled blocklist load error:', err.message);
+  }
+}
 
 chrome.runtime.onInstalled.addListener(async () => {
   const current = await chrome.storage.sync.get(null);
@@ -79,14 +99,18 @@ chrome.runtime.onInstalled.addListener(async () => {
     toSet.customKeywords = current.customKeywords.filter(k => k.trim().toLowerCase() !== 'ai');
   }
 
-  // Set thumbnails engine to false to protect human creators
   toSet.engineThumbnails = false;
   toSet.whitelistVerified = true;
 
   await chrome.storage.sync.set(toSet);
-
   chrome.action.setBadgeBackgroundColor({ color: '#f43f5e' });
+
+  await ensureLocalBlocklist();
   syncCommunityBlocklist();
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  ensureLocalBlocklist();
 });
 
 setInterval(syncCommunityBlocklist, 6 * 60 * 60 * 1000);
@@ -94,11 +118,15 @@ setInterval(syncCommunityBlocklist, 6 * 60 * 60 * 1000);
 async function syncCommunityBlocklist() {
   try {
     const res = await fetch(GITHUB_REMOTE_BLOCKLIST_URL, { cache: 'no-store' });
-    if (!res.ok) return { success: false, status: res.status };
+    if (!res.ok) {
+      // If remote not accessible yet, ensure bundled local is loaded
+      await ensureLocalBlocklist();
+      return { success: false, status: res.status };
+    }
 
     const data = await res.json();
     if (data && Array.isArray(data.channels)) {
-      await chrome.storage.sync.set({
+      await chrome.storage.local.set({
         remoteChannels: data.channels,
         remoteVideos: data.videoIds || [],
         lastCommunitySync: new Date().toISOString()
@@ -107,7 +135,8 @@ async function syncCommunityBlocklist() {
       return { success: true, count: data.channels.length };
     }
   } catch (err) {
-    console.warn('[NoSlop Background] Community blocklist sync failed:', err.message);
+    console.warn('[NoSlop Background] Community blocklist sync failed, falling back to local:', err.message);
+    await ensureLocalBlocklist();
     return { success: false, error: err.message };
   }
 }
