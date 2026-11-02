@@ -108,7 +108,7 @@
         </div>
         <div class="community-sync-actions">
           <button type="button" id="syncNowBtn" class="btn btn-secondary btn-sm">Sync now</button>
-          <a href="https://github.com/pranav256/block-ai-slop/issues/new?template=report-slop.yml" target="_blank" class="btn btn-secondary btn-sm">Report slop</a>
+          <button type="button" id="exportReportsBtn" class="btn btn-secondary btn-sm" title="Export queued channel reports as JSON">Export queue</button>
         </div>
       </div>
     </section>
@@ -138,7 +138,7 @@
             <span class="rule-label">AI Shorts</span>
             <span class="rule-desc">Filter synthetic media and automated loops in Shorts feeds</span>
           </div>
-          <input type="checkbox" id="toggleShorts" class="sub-toggle" checked>
+          <input type="checkbox" id="toggleShorts" class="sub-toggle">
         </label>
 
         <label class="rule-item">

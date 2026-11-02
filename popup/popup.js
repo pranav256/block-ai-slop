@@ -45,6 +45,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const DEFAULT_KEYWORDS = [
     "ai generated",
+    "ai-generated",
+    "ai drama",
+    "ai-drama",
+    "ai dub",
+    "ai dubbed",
+    "ai romance",
+    "ai series",
+    "ai recap",
     "ai video",
     "ai animation",
     "ai animated",
@@ -76,7 +84,26 @@ document.addEventListener('DOMContentLoaded', () => {
     "minimax",
     "hailuo",
     "suno ai",
-    "udio ai"
+    "udio ai",
+    "minidrama",
+    "mini drama",
+    "short drama",
+    "ai philosophy",
+    "ai stoic",
+    "ai stoicism",
+    "ai quotes",
+    "ai motivation",
+    "ai psychology",
+    "dark psychology ai",
+    "faceless channel",
+    "chatgpt stories",
+    "reddit ai",
+    "ai facts",
+    "cloned voice",
+    "deepfake voice",
+    "ai voice cover",
+    "text to speech",
+    "text-to-speech"
   ];
 
   // Tab switching
@@ -114,12 +141,14 @@ document.addEventListener('DOMContentLoaded', () => {
       // Creator Safety & Preferences
       toggleWhitelistVerified.checked = currentSettings.whitelistVerified !== false;
       toggleSynthetic.checked = currentSettings.blockSyntheticDisclosures !== false;
-      toggleShorts.checked = currentSettings.blockShorts !== false;
+      toggleShorts.checked = Boolean(currentSettings.blockShorts);
       togglePlaceholder.checked = Boolean(currentSettings.placeholderMode);
 
-      // Stats
-      const total = currentSettings.stats?.totalBlocked || 0;
-      totalCountEl.textContent = total.toLocaleString();
+      // Stats (stored efficiently in chrome.storage.local)
+      chrome.storage.local.get(['stats'], (localData) => {
+        const total = localData?.stats?.totalBlocked || currentSettings.stats?.totalBlocked || 0;
+        totalCountEl.textContent = total.toLocaleString();
+      });
 
       // Community Blocklist Stats from local storage
       chrome.storage.local.get(['remoteChannels', 'lastCommunitySync'], (localData) => {
@@ -216,7 +245,7 @@ document.addEventListener('DOMContentLoaded', () => {
     chrome.storage.sync.set({ placeholderMode: togglePlaceholder.checked });
   });
 
-  syncNowBtn.addEventListener('click', () => {
+    syncNowBtn.addEventListener('click', () => {
     syncStatus.textContent = 'Syncing from GitHub...';
     chrome.runtime.sendMessage({ action: 'syncCommunity' }, (response) => {
       if (response && response.success) {
@@ -228,6 +257,27 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   });
+
+  const exportReportsBtn = document.getElementById('exportReportsBtn');
+  if (exportReportsBtn) {
+    exportReportsBtn.addEventListener('click', () => {
+      chrome.storage.local.get(['reportedSlopQueue'], (data) => {
+        const queue = data.reportedSlopQueue || [];
+        if (queue.length === 0) {
+          alert('No queued reports yet. When you click "Report Slop" on any YouTube card, they will be saved here.');
+          return;
+        }
+        const jsonStr = JSON.stringify(queue, null, 2);
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `noslop-reported-channels-${new Date().toISOString().slice(0, 10)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+    });
+  }
 
   function renderKeywords(keywords) {
     keywordCloud.innerHTML = '';
