@@ -53,19 +53,29 @@
   }
 
   function loadSettings() {
-    chrome.storage.sync.get(null, (data) => {
+    chrome.storage.sync.get(null, (syncData) => {
       if (chrome.runtime.lastError) return;
-      if (data && Object.keys(data).length > 0) {
-        settings = { ...settings, ...data };
+      if (syncData && Object.keys(syncData).length > 0) {
+        settings = { ...settings, ...syncData };
       }
       updateCompiledKeywords();
 
-      if (window.NoSlopCommunity) {
-        window.NoSlopCommunity.init(settings.blockedChannels, settings.remoteChannels, settings.remoteVideos);
-      }
+      // Load 46k+ community blocklist from local storage
+      chrome.storage.local.get(['remoteChannels', 'remoteVideos'], (localData) => {
+        if (localData?.remoteChannels) {
+          settings.remoteChannels = localData.remoteChannels;
+        }
+        if (localData?.remoteVideos) {
+          settings.remoteVideos = localData.remoteVideos;
+        }
 
-      scanFeed();
-      checkWatchPage();
+        if (window.NoSlopCommunity) {
+          window.NoSlopCommunity.init(settings.blockedChannels, settings.remoteChannels, settings.remoteVideos);
+        }
+
+        scanFeed();
+        checkWatchPage();
+      });
     });
   }
 
@@ -75,6 +85,19 @@
         settings[key] = change.newValue;
       }
       updateCompiledKeywords();
+      if (window.NoSlopCommunity) {
+        window.NoSlopCommunity.init(settings.blockedChannels, settings.remoteChannels, settings.remoteVideos);
+      }
+      resetAllCards();
+      scanFeed();
+      checkWatchPage();
+    } else if (area === 'local') {
+      if (changes.remoteChannels) {
+        settings.remoteChannels = changes.remoteChannels.newValue || [];
+      }
+      if (changes.remoteVideos) {
+        settings.remoteVideos = changes.remoteVideos.newValue || [];
+      }
       if (window.NoSlopCommunity) {
         window.NoSlopCommunity.init(settings.blockedChannels, settings.remoteChannels, settings.remoteVideos);
       }

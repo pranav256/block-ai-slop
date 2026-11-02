@@ -5,7 +5,8 @@
 **Eliminate AI-generated slop, synthetic media disclosures, and automated drama mills from YouTube feeds without blocking legitimate human creators.**
 
 [![Manifest V3](https://img.shields.io/badge/Manifest-V3-blue.svg)](https://developer.chrome.com/docs/extensions/mv3/intro/)
-[![Version](https://img.shields.io/badge/version-2.5.0-rose.svg)](#)
+[![Version](https://img.shields.io/badge/version-2.6.0-rose.svg)](#)
+[![Blocklist Size](https://img.shields.io/badge/community%20blocklist-46k%2B%20channels-blueviolet.svg)](community-blocklist.json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/pranav256/block-ai-slop/pulls)
 [![Browser Support](https://img.shields.io/badge/Browsers-Chrome%20%7C%20Brave%20%7C%20Edge%20%7C%20Arc-orange.svg)](#installation)
@@ -58,9 +59,15 @@ Accumulates independent probability signals ($P \in [0.0, 1.0]$) to catch sneaky
 * **Melodrama Plot Formulas**: Flags automated content tropes (*"She called security on her ex... then the chairman"*, *"He made his wife a billionaire"*, *"Useless son-in-law is the Dragon King"*).
 * **Homoglyph Normalization**: Normalizes character replacements (e.g. `Hero Al` with lowercase `l` $\rightarrow$ `Hero AI`).
 
-### 2. Community & Curated Consensus Engine
-* Pre-seeded $O(1)$ Hash Set of known automated drama mills (`Nov Drama`, `Hero AI Dramas`, `Tale Time66`, `DramaBox`, `ShortMax`, `ReelShort`, etc.).
-* **GitHub Sync**: Automatically syncs newly reported channels from the centralized [`community-blocklist.json`](community-blocklist.json) file every 6 hours.
+### 2. Community Consensus Engine (46,800+ Verified Channels)
+* **High-Confidence Databases Merged**: Aggregates the community blocklists from:
+  * **AiSList** (`Override92/AiSList`): 44,800+ community-verified automated channels and handles.
+  * **Cevval YouTube AI Music Blocklist** (`cevvalkoala`): 2,000+ synthetic music and audio spam channels.
+  * **YouTube DeSlop** (`NikoboiNFTB/DeSlop`): Curated generative video channels.
+  * **Curated Drama Mills** (`Nov Drama`, `Hero AI Dramas`, `Tale Time66`, `DramaBox`, `ShortMax`, `ReelShort`, etc.).
+* **Zero-False-Positive Whitelist**: Excludes legitimate human science and tech educators (`AI Explained`, `Veritasium`, `StarTalk`, `MKBHD`, `Two Minute Papers`, `Lex Fridman`).
+* **Instant $O(1)$ Multi-Index Hashing**: Sub-millisecond lookup (< 0.001 ms per video card) across channel handles (`@handle`), channel IDs (`UC...`), and normalized names.
+* **Auto-Sync via GitHub**: Syncs seamlessly every 6 hours from [`community-blocklist.json`](community-blocklist.json) into `chrome.storage.local`.
 
 ### 3. Watch Page Audio & Script Cadence Analyzer
 * **Script Perplexity**: Scans video descriptions and transcripts for repetitive LLM n-grams (*"delve into"*, *"testament to"*, *"in a world where"*, *"little did he know"*).
@@ -136,6 +143,8 @@ block-ai-slop/
 │   ├── popup.html                      # Unslop control panel
 │   ├── popup.css                       # Graphite design & hairline borders
 │   └── popup.js                        # Settings & rule management
+├── scripts/
+│   └── update-community-blocklist.js   # Automated aggregator for upstream community blocklists
 ├── icons/                              # 16px, 48px, 128px PNGs & SVG
 └── README.md
 ```

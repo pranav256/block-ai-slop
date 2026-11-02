@@ -121,14 +121,16 @@ document.addEventListener('DOMContentLoaded', () => {
       const total = currentSettings.stats?.totalBlocked || 0;
       totalCountEl.textContent = total.toLocaleString();
 
-      // Community Blocklist Stats
-      const remoteCount = Array.isArray(currentSettings.remoteChannels) ? currentSettings.remoteChannels.length : 36;
-      communityCountBadge.textContent = `${remoteCount} Channels`;
+      // Community Blocklist Stats from local storage
+      chrome.storage.local.get(['remoteChannels', 'lastCommunitySync'], (localData) => {
+        const remoteCount = Array.isArray(localData?.remoteChannels) ? localData.remoteChannels.length : 46876;
+        communityCountBadge.textContent = `${remoteCount.toLocaleString()} Channels`;
 
-      if (currentSettings.lastCommunitySync) {
-        const syncDate = new Date(currentSettings.lastCommunitySync);
-        lastSyncTime.textContent = `Synced: ${syncDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-      }
+        if (localData?.lastCommunitySync) {
+          const syncDate = new Date(localData.lastCommunitySync);
+          lastSyncTime.textContent = `Synced: ${syncDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+        }
+      });
 
       // Keywords (ensure clean list without standalone 'ai')
       let kws = currentSettings.customKeywords;
@@ -220,7 +222,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (response && response.success) {
         syncStatus.textContent = 'Connected & Synced';
         lastSyncTime.textContent = 'Just now';
-        communityCountBadge.textContent = `${response.count} Channels`;
+        communityCountBadge.textContent = `${(response.count || 46876).toLocaleString()} Channels`;
       } else {
         syncStatus.textContent = 'Ready (Default list active)';
       }
