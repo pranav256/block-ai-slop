@@ -1,0 +1,58 @@
+name: "Report AI Slop / Missed Video"
+description: "Submit a missed AI video or channel to the centralized NoSlop community blocklist"
+title: "[Slop Report]: "
+labels: ["community-slop-report"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping keep YouTube clean! Submissions are reviewed and synced to all NoSlop extension users worldwide.
+  - type: input
+    id: channel_name
+    attributes:
+      label: "Channel Name"
+      description: "Exact name of the YouTube channel"
+      placeholder: "e.g. Hero AI Dramas"
+    validations:
+      required: true
+  - type: input
+    id: channel_url
+    attributes:
+      label: "Channel URL / Handle"
+      description: "Link to channel or @handle"
+      placeholder: "e.g. https://www.youtube.com/@HeroAIDramas"
+    validations:
+      required: false
+  - type: input
+    id: video_title
+    attributes:
+      label: "Video Title"
+      description: "The title of the AI video that slipped through"
+      placeholder: "e.g. He Made His Wife a Billionaire..."
+    validations:
+      required: true
+  - type: input
+    id: video_url
+    attributes:
+      label: "Video Link"
+      description: "YouTube link (https://www.youtube.com/watch?v=...)"
+      placeholder: "https://www.youtube.com/watch?v=..."
+    validations:
+      required: false
+  - type: checkboxes
+    id: tells
+    attributes:
+      label: "AI Indicators (Why is it slop?)"
+      options:
+        - label: "Melodrama / CEO / Mafia / Dragon King formulaic script"
+        - label: "TTS / Robotic voiceover (ElevenLabs, Bark, etc.)"
+        - label: "AI generated imagery / plastic faces / Midjourney aesthetic"
+        - label: "Disclaimer in description (EDSA standards / fictional scenario)"
+        - label: "YouTube official Altered or synthetic content disclosure"
+  - type: textarea
+    id: notes
+    attributes:
+      label: "Additional Notes / Evidence"
+      placeholder: "Any additional context..."
+    validations:
+      required: false
