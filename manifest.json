@@ -1,0 +1,49 @@
+{
+  "manifest_version": 3,
+  "name": "NoSlop - AI Video Blocker for YouTube",
+  "version": "2.0.0",
+  "description": "Multi-engine AI video blocker for YouTube: heuristic scoring, thumbnail vision, community blocklists, and audio cadence analysis.",
+  "permissions": [
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "*://*.youtube.com/*",
+    "*://*.ytimg.com/*",
+    "*://*.ggpht.com/*"
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background/background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.youtube.com/*"
+      ],
+      "js": [
+        "content/engines/communityEngine.js",
+        "content/engines/scoringEngine.js",
+        "content/engines/thumbnailEngine.js",
+        "content/engines/audioScriptEngine.js",
+        "content/content.js"
+      ],
+      "css": [
+        "content/content.css"
+      ],
+      "run_at": "document_start"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

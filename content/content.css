@@ -1,0 +1,233 @@
+/* ==========================================================================
+   NoSlop - Content Styles (v2.4)
+   Strict unslop principles: hairline borders, neutral graphite, quiet chrome
+   ========================================================================== */
+
+/* Hard block: completely collapse and hide element from YouTube feeds & search */
+.noslop-hidden,
+[data-noslop-status="blocked"],
+ytd-rich-item-renderer[data-noslop-status="blocked"],
+ytd-video-renderer[data-noslop-status="blocked"],
+ytd-compact-video-renderer[data-noslop-status="blocked"],
+ytd-grid-video-renderer[data-noslop-status="blocked"],
+ytd-reel-item-renderer[data-noslop-status="blocked"],
+yt-lockup-view-model[data-noslop-status="blocked"] {
+  display: none !important;
+  visibility: hidden !important;
+  height: 0px !important;
+  min-height: 0px !important;
+  max-height: 0px !important;
+  margin: 0px !important;
+  padding: 0px !important;
+  overflow: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Soft block: subtle collapsed placeholder bar */
+.noslop-placeholder {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  margin: 6px 0;
+  border-radius: 6px;
+  background-color: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.4;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.noslop-placeholder:hover {
+  background-color: #1e293b;
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.noslop-placeholder-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.noslop-placeholder-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  background-color: rgba(244, 63, 94, 0.15);
+  color: #fb7185;
+}
+
+.noslop-placeholder-reason {
+  color: #cbd5e1;
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.noslop-reveal-btn {
+  background: transparent;
+  border: none;
+  color: #38bdf8;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease;
+}
+
+.noslop-reveal-btn:hover {
+  background-color: rgba(56, 189, 248, 0.12);
+}
+
+/* Hover Action Bar: Block Channel & Report to GitHub */
+.noslop-card-relative {
+  position: relative !important;
+}
+
+.noslop-action-bar {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1000;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px;
+  background-color: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  transform: translateY(-2px);
+}
+
+ytd-rich-item-renderer:hover .noslop-action-bar,
+ytd-video-renderer:hover .noslop-action-bar,
+ytd-compact-video-renderer:hover .noslop-action-bar,
+ytd-grid-video-renderer:hover .noslop-action-bar,
+yt-lockup-view-model:hover .noslop-action-bar {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.noslop-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  color: #cbd5e1;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.noslop-action-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.noslop-action-btn.report-btn:hover {
+  background-color: rgba(244, 63, 94, 0.2);
+  color: #fb7185;
+}
+
+.noslop-action-btn svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  fill: none;
+}
+
+/* Toast Notification */
+.noslop-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background-color: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: #f8fafc;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 12px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+  animation: noslopSlideIn 0.2s ease;
+}
+
+@keyframes noslopSlideIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Watch page blocking banner */
+.noslop-watch-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 12px 0;
+  padding: 12px 16px;
+  background-color: #0f172a;
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  border-radius: 8px;
+  color: #f8fafc;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+}
+
+.noslop-watch-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.noslop-watch-banner-icon {
+  width: 20px;
+  height: 20px;
+  stroke: #f43f5e;
+  stroke-width: 2;
+  fill: none;
+  flex-shrink: 0;
+}
+
+.noslop-watch-banner-btn {
+  background-color: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #f8fafc;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.noslop-watch-banner-btn:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
