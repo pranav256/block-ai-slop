@@ -1,7 +1,7 @@
 /**
- * NoSlop - Engine 1: Multi-Signal Weighted Heuristic Scoring Engine (v2.3)
- * Full integration with YouTube's "How this content was made" / "Altered or synthetic content"
- * info buttons, plus deep coverage for automated drama mills and AI storytelling.
+ * NoSlop - Engine 1: Multi-Signal Weighted Heuristic Scoring Engine (v2.5)
+ * Distinguishes AI Slop from legitimate human creators talking about AI.
+ * Whitelists verified human creators and never blocks educational/interview topics.
  */
 
 (() => {
@@ -10,7 +10,8 @@
   // YouTube's official AI Info Button & Disclosure markers
   const YOUTUBE_AI_DISCLOSURE_REGEX = /(how this content was made|altered or synthetic|made with ai|significantly edited or digitally generated|digitally generated|synthetic media|auto-dubbed|generated using artificial intelligence|generated with ai)/i;
 
-  const AI_HASHTAG_REGEX = /#ai[a-z0-9_-]*/i;
+  // Specific generative slop hashtags (NOT general #ai)
+  const AI_SLOP_HASHTAG_REGEX = /#ai(story|drama|film|art|video|animation|generated|voice|cover|slop)\b/i;
 
   const EDSA_DISCLAIMER_REGEX = /(complies with edsa standards|not a real-life scenario|not a real life scenario|please do not imitate|days full of humiliation are over|generated with ai|fictional drama scenario|all characters and events are fictional)/i;
 
@@ -53,10 +54,7 @@
    * Calculates the composite slop probability [0.0 - 1.0] using Bayesian independence
    */
   function calculateSlopScore(meta, compiledKeywords = [], options = {}) {
-    const signals = [];
-    const reasons = [];
-
-    // Signal 1: YouTube Official AI Info Button & Synthetic Disclosure (Instant Block 1.0)
+    // 1. YouTube Official AI Info Button & Synthetic Disclosure (Always checked)
     if (options.blockSyntheticDisclosures !== false) {
       if (
         meta.hasAiInfoButton ||
@@ -64,18 +62,34 @@
         YOUTUBE_AI_DISCLOSURE_REGEX.test(meta.cardText) ||
         YOUTUBE_AI_DISCLOSURE_REGEX.test(meta.ariaLabels)
       ) {
-        signals.push(1.0);
-        reasons.push('YouTube Official AI Info / Synthetic Disclosure');
+        return {
+          score: 1.0,
+          isBlocked: true,
+          reasons: ['YouTube Official AI Info / Synthetic Disclosure']
+        };
       }
     }
 
-    // Signal 2: AI Hashtag (#AIStory, #AIDrama, #AIFilm, etc.)
-    if (AI_HASHTAG_REGEX.test(meta.title) || AI_HASHTAG_REGEX.test(meta.snippet) || AI_HASHTAG_REGEX.test(meta.cardText)) {
-      const match = meta.title.match(AI_HASHTAG_REGEX) ||
-                    meta.snippet.match(AI_HASHTAG_REGEX) ||
-                    meta.cardText.match(AI_HASHTAG_REGEX);
+    // 2. Protect Verified Human Creators (StarTalk, Diary of a CEO, Lex Fridman, etc.)
+    // Unless officially labeled as synthetic media, verified channels talking about AI are never slop!
+    if (options.whitelistVerified !== false && meta.isVerified) {
+      return {
+        score: 0.0,
+        isBlocked: false,
+        reasons: ['Verified Creator Whitelisted']
+      };
+    }
+
+    const signals = [];
+    const reasons = [];
+
+    // Signal 2: AI Slop Hashtag (#AIStory, #AIDrama, #AIFilm, etc.)
+    if (AI_SLOP_HASHTAG_REGEX.test(meta.title) || AI_SLOP_HASHTAG_REGEX.test(meta.snippet) || AI_SLOP_HASHTAG_REGEX.test(meta.cardText)) {
+      const match = meta.title.match(AI_SLOP_HASHTAG_REGEX) ||
+                    meta.snippet.match(AI_SLOP_HASHTAG_REGEX) ||
+                    meta.cardText.match(AI_SLOP_HASHTAG_REGEX);
       signals.push(0.95);
-      reasons.push(`AI Hashtag (${match[0]})`);
+      reasons.push(`AI Slop Hashtag (${match[0]})`);
     }
 
     // Signal 3: EDSA / Boilerplate Automated Disclaimers
@@ -155,7 +169,7 @@
     }
     const finalScore = Number((1.0 - complement).toFixed(3));
 
-    const threshold = options.sensitivityThreshold || 0.45;
+    const threshold = options.sensitivityThreshold || 0.50;
     const isBlocked = finalScore >= threshold;
 
     return {

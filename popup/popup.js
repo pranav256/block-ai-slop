@@ -1,6 +1,6 @@
 /**
- * NoSlop - Popup Script (v2.4)
- * Manages all 4 detection engines, sensitivity thresholds, rules, blocklists, and GitHub community sync.
+ * NoSlop - Popup Script (v2.5)
+ * Protects legitimate human creators talking about AI while eliminating true AI slop mills.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -11,9 +11,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Engine Toggles
   const toggleEngineScoring = document.getElementById('toggleEngineScoring');
-  const toggleEngineThumbnails = document.getElementById('toggleEngineThumbnails');
   const toggleEngineCommunity = document.getElementById('toggleEngineCommunity');
   const toggleEngineAudioScript = document.getElementById('toggleEngineAudioScript');
+  const toggleEngineThumbnails = document.getElementById('toggleEngineThumbnails');
   const segmentBtns = document.querySelectorAll('.segment-btn');
 
   // Community Sync Elements
@@ -22,7 +22,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const syncStatus = document.getElementById('syncStatus');
   const lastSyncTime = document.getElementById('lastSyncTime');
 
-  // General Preferences
+  // Creator Safety & Preferences
+  const toggleWhitelistVerified = document.getElementById('toggleWhitelistVerified');
   const toggleSynthetic = document.getElementById('toggleSynthetic');
   const toggleShorts = document.getElementById('toggleShorts');
   const togglePlaceholder = document.getElementById('togglePlaceholder');
@@ -43,32 +44,6 @@ document.addEventListener('DOMContentLoaded', () => {
   let currentSettings = {};
 
   const DEFAULT_KEYWORDS = [
-    "ai",
-    "genai",
-    "generative ai",
-    "sora",
-    "midjourney",
-    "kling",
-    "runway",
-    "runwayml",
-    "elevenlabs",
-    "luma",
-    "dream machine",
-    "pika",
-    "flux.1",
-    "flux ai",
-    "haiper",
-    "stable diffusion",
-    "stablediffusion",
-    "deepfake",
-    "dall-e",
-    "dalle",
-    "synthesia",
-    "heygen",
-    "minimax",
-    "hailuo",
-    "udio",
-    "suno",
     "ai generated",
     "ai video",
     "ai animation",
@@ -76,12 +51,32 @@ document.addEventListener('DOMContentLoaded', () => {
     "ai film",
     "ai movie",
     "ai story",
+    "ai stories",
     "ai voice",
     "ai cover",
     "ai song",
     "ai slop",
     "made with ai",
-    "created with ai"
+    "created with ai",
+    "sora",
+    "kling",
+    "runway gen",
+    "runwayml",
+    "elevenlabs",
+    "luma dream machine",
+    "pika labs",
+    "flux.1",
+    "flux ai",
+    "haiper",
+    "stable diffusion",
+    "stablediffusion",
+    "deepfake",
+    "synthesia",
+    "heygen",
+    "minimax",
+    "hailuo",
+    "suno ai",
+    "udio ai"
   ];
 
   // Tab switching
@@ -96,12 +91,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Load initial settings
   function init() {
     chrome.storage.sync.get(null, (data) => {
       currentSettings = data || {};
 
-      // Master switch
       const isEnabled = currentSettings.enabled !== false;
       masterToggle.checked = isEnabled;
       updateStatusDisplay(isEnabled);
@@ -114,11 +107,12 @@ document.addEventListener('DOMContentLoaded', () => {
       });
 
       // Engines 2, 3, 4
-      toggleEngineThumbnails.checked = currentSettings.engineThumbnails !== false;
       toggleEngineCommunity.checked = currentSettings.engineCommunity !== false;
       toggleEngineAudioScript.checked = currentSettings.engineAudioScript !== false;
+      toggleEngineThumbnails.checked = Boolean(currentSettings.engineThumbnails); // False by default!
 
-      // Preferences
+      // Creator Safety & Preferences
+      toggleWhitelistVerified.checked = currentSettings.whitelistVerified !== false;
       toggleSynthetic.checked = currentSettings.blockSyntheticDisclosures !== false;
       toggleShorts.checked = currentSettings.blockShorts !== false;
       togglePlaceholder.checked = Boolean(currentSettings.placeholderMode);
@@ -136,18 +130,20 @@ document.addEventListener('DOMContentLoaded', () => {
         lastSyncTime.textContent = `Synced: ${syncDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
       }
 
-      // Keywords & Channels
+      // Keywords (ensure clean list without standalone 'ai')
       let kws = currentSettings.customKeywords;
-      if (!Array.isArray(kws) || kws.length === 0 || !kws.includes('ai')) {
+      if (!Array.isArray(kws) || kws.length === 0) {
         kws = DEFAULT_KEYWORDS;
         chrome.storage.sync.set({ customKeywords: DEFAULT_KEYWORDS });
+      } else if (kws.includes('ai')) {
+        kws = kws.filter(k => k.trim().toLowerCase() !== 'ai');
+        chrome.storage.sync.set({ customKeywords: kws });
       }
 
       renderKeywords(kws);
       renderChannels(currentSettings.blockedChannels || []);
     });
 
-    // Request active tab count
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (tabs?.[0]?.id) {
         chrome.runtime.sendMessage(
@@ -172,14 +168,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Master switch
   masterToggle.addEventListener('change', () => {
     const isEnabled = masterToggle.checked;
     updateStatusDisplay(isEnabled);
     chrome.storage.sync.set({ enabled: isEnabled });
   });
 
-  // Engine 1 & Sensitivity
   toggleEngineScoring.addEventListener('change', () => {
     chrome.storage.sync.set({ engineScoring: toggleEngineScoring.checked });
   });
@@ -192,11 +186,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Engines 2, 3, 4
-  toggleEngineThumbnails.addEventListener('change', () => {
-    chrome.storage.sync.set({ engineThumbnails: toggleEngineThumbnails.checked });
-  });
-
   toggleEngineCommunity.addEventListener('change', () => {
     chrome.storage.sync.set({ engineCommunity: toggleEngineCommunity.checked });
   });
@@ -205,7 +194,26 @@ document.addEventListener('DOMContentLoaded', () => {
     chrome.storage.sync.set({ engineAudioScript: toggleEngineAudioScript.checked });
   });
 
-  // Community Sync Button
+  toggleEngineThumbnails.addEventListener('change', () => {
+    chrome.storage.sync.set({ engineThumbnails: toggleEngineThumbnails.checked });
+  });
+
+  toggleWhitelistVerified.addEventListener('change', () => {
+    chrome.storage.sync.set({ whitelistVerified: toggleWhitelistVerified.checked });
+  });
+
+  toggleSynthetic.addEventListener('change', () => {
+    chrome.storage.sync.set({ blockSyntheticDisclosures: toggleSynthetic.checked });
+  });
+
+  toggleShorts.addEventListener('change', () => {
+    chrome.storage.sync.set({ blockShorts: toggleShorts.checked });
+  });
+
+  togglePlaceholder.addEventListener('change', () => {
+    chrome.storage.sync.set({ placeholderMode: togglePlaceholder.checked });
+  });
+
   syncNowBtn.addEventListener('click', () => {
     syncStatus.textContent = 'Syncing from GitHub...';
     chrome.runtime.sendMessage({ action: 'syncCommunity' }, (response) => {
@@ -219,20 +227,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Preferences
-  toggleSynthetic.addEventListener('change', () => {
-    chrome.storage.sync.set({ blockSyntheticDisclosures: toggleSynthetic.checked });
-  });
-
-  toggleShorts.addEventListener('change', () => {
-    chrome.storage.sync.set({ blockShorts: toggleShorts.checked });
-  });
-
-  togglePlaceholder.addEventListener('change', () => {
-    chrome.storage.sync.set({ placeholderMode: togglePlaceholder.checked });
-  });
-
-  // Keywords management
   function renderKeywords(keywords) {
     keywordCloud.innerHTML = '';
     if (!keywords || keywords.length === 0) {
@@ -289,7 +283,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.key === 'Enter') addKeyword();
   });
 
-  // Blocked channels management
   function renderChannels(channels) {
     channelList.innerHTML = '';
     if (!channels || channels.length === 0) {
@@ -349,14 +342,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.key === 'Enter') addChannel();
   });
 
-  // Reset to defaults
   resetDefaultsBtn.addEventListener('click', () => {
     if (confirm('Reset all detection engines and rules to defaults?')) {
       chrome.storage.sync.set({
         enabled: true,
         engineScoring: true,
         sensitivity: 'balanced',
-        engineThumbnails: true,
+        engineThumbnails: false,
+        whitelistVerified: true,
         engineCommunity: true,
         engineAudioScript: true,
         blockSyntheticDisclosures: true,

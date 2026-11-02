@@ -16,7 +16,7 @@
           <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line>
         </svg>
         <div class="brand-text">
-          <span class="brand-name">NoSlop 2.4</span>
+          <span class="brand-name">NoSlop 2.5</span>
           <span class="status-indicator" id="statusBadge">Active</span>
         </div>
       </div>
@@ -43,7 +43,7 @@
     <section class="section">
       <div class="section-header">
         <h2 class="section-title">Detection engines</h2>
-        <span class="badge-recommended">4 Active</span>
+        <span class="badge-recommended">Smart Filter</span>
       </div>
 
       <div class="rule-list">
@@ -51,8 +51,8 @@
         <div class="engine-box">
           <label class="rule-item no-border">
             <div class="rule-text">
-              <span class="rule-label">1. Multi-signal heuristic scoring <span class="tag-default">Default</span></span>
-              <span class="rule-desc">Bayesian probability across title formulas, disclaimers, and tropes</span>
+              <span class="rule-label">1. Multi-signal heuristic scoring <span class="tag-default">Primary</span></span>
+              <span class="rule-desc">Bayesian probability across formulas, disclaimers, and generative models</span>
             </div>
             <input type="checkbox" id="toggleEngineScoring" class="sub-toggle" checked>
           </label>
@@ -66,20 +66,11 @@
           </div>
         </div>
 
-        <!-- Engine 2: Thumbnail Vision -->
-        <label class="rule-item">
-          <div class="rule-text">
-            <span class="rule-label">2. Thumbnail vision analysis</span>
-            <span class="rule-desc">Canvas pixel scan for plastic diffusion skin & hyper-saturation</span>
-          </div>
-          <input type="checkbox" id="toggleEngineThumbnails" class="sub-toggle" checked>
-        </label>
-
         <!-- Engine 3: Community Consensus -->
         <label class="rule-item">
           <div class="rule-text">
-            <span class="rule-label">3. Community & curated blocklist</span>
-            <span class="rule-desc">Instant O(1) hash set matching known AI content mills</span>
+            <span class="rule-label">2. Community & curated blocklist</span>
+            <span class="rule-desc">Instant O(1) hash set matching known AI drama mills and platforms</span>
           </div>
           <input type="checkbox" id="toggleEngineCommunity" class="sub-toggle" checked>
         </label>
@@ -87,10 +78,19 @@
         <!-- Engine 4: Watch Page Audio & Script -->
         <label class="rule-item">
           <div class="rule-text">
-            <span class="rule-label">4. Audio cadence & script perplexity</span>
+            <span class="rule-label">3. Audio cadence & script perplexity</span>
             <span class="rule-desc">Identifies robotic TTS pause rhythms and LLM script n-grams</span>
           </div>
           <input type="checkbox" id="toggleEngineAudioScript" class="sub-toggle" checked>
+        </label>
+
+        <!-- Engine 2: Thumbnail Vision (Optional) -->
+        <label class="rule-item">
+          <div class="rule-text">
+            <span class="rule-label">4. Thumbnail vision scan <span class="tag-optional">Optional</span></span>
+            <span class="rule-desc">Canvas pixel analysis for plastic skin (off by default to protect human creators)</span>
+          </div>
+          <input type="checkbox" id="toggleEngineThumbnails" class="sub-toggle">
         </label>
       </div>
     </section>
@@ -113,10 +113,18 @@
       </div>
     </section>
 
-    <!-- General Preferences -->
+    <!-- Creator Safety & Preferences -->
     <section class="section">
-      <h2 class="section-title">Preferences</h2>
+      <h2 class="section-title">Creator safety & preferences</h2>
       <div class="rule-list">
+        <label class="rule-item">
+          <div class="rule-text">
+            <span class="rule-label">Protect verified human creators</span>
+            <span class="rule-desc">Never block verified channels (StarTalk, DOAC, etc.) talking about AI</span>
+          </div>
+          <input type="checkbox" id="toggleWhitelistVerified" class="sub-toggle" checked>
+        </label>
+
         <label class="rule-item">
           <div class="rule-text">
             <span class="rule-label">YouTube official AI info buttons</span>

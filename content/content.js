@@ -1,16 +1,16 @@
 /**
- * NoSlop - Content Script (Orchestrator v2.4)
- * Multi-engine AI slop blocker with 1-click GitHub crowdsourced reporting & local blacklist.
+ * NoSlop - Content Script (Orchestrator v2.5)
+ * Protects legitimate human creators talking about AI while eliminating true AI slop mills.
  */
 
 (() => {
   'use strict';
 
-  console.log('%c[NoSlop 2.4]%c Multi-engine active with GitHub Crowdsource Reporting.', 'color: #f43f5e; font-weight: bold', 'color: #94a3b8');
+  console.log('%c[NoSlop 2.5]%c Active with Verified Creator Protection.', 'color: #f43f5e; font-weight: bold', 'color: #94a3b8');
 
   const SENSITIVITY_THRESHOLDS = {
     aggressive: 0.35,
-    balanced: 0.45,
+    balanced: 0.50,
     conservative: 0.65
   };
 
@@ -18,7 +18,8 @@
     enabled: true,
     engineScoring: true,        // Engine 1
     sensitivity: "balanced",
-    engineThumbnails: true,     // Engine 2
+    engineThumbnails: false,    // Engine 2: DISABLED by default to protect human creators using AI art
+    whitelistVerified: true,    // Protects verified channels (StarTalk, Diary of a CEO, etc.)
     engineCommunity: true,      // Engine 3
     engineAudioScript: true,    // Engine 4
     blockSyntheticDisclosures: true,
@@ -149,12 +150,17 @@
 
     const title = titleCandidates.join(' ').replace(/\s+/g, ' ').trim();
 
-    // 2. Channel Name
+    // 2. Channel Name & Verified Status
     const channelEl = rootCard.querySelector(
       'ytd-channel-name, #channel-name, #text.ytd-channel-name, a.yt-simple-endpoint[href*="/@"], a.yt-simple-endpoint[href*="/channel/"], .yt-lockup-metadata-view-model-wiz__metadata a, #byline-container a, #channel-info'
     );
     const channelName = (channelEl?.textContent || '').replace(/\s+/g, ' ').trim();
     const channelHref = channelEl?.getAttribute('href') || '';
+
+    // Check if channel has YouTube's verified badge
+    const isVerified = Boolean(rootCard.querySelector(
+      '[aria-label="Verified"], [aria-label*="Verified" i], .badge-style-type-verified, ytd-badge-supported-renderer [aria-label*="Verified"]'
+    ));
 
     // 3. Description Snippet (Search Results)
     const snippetEl = rootCard.querySelector(
@@ -207,6 +213,7 @@
       videoId,
       channelName,
       channelHref,
+      isVerified,
       snippet,
       badgeText,
       cardText,
@@ -218,7 +225,7 @@
   }
 
   /**
-   * Evaluates a video across the 4 active detection engines
+   * Evaluates a video across active detection engines
    */
   async function evaluateVideo(meta) {
     // Priority 1: Explicit YouTube AI Info Button or Disclosure (Instant Block)
@@ -240,12 +247,13 @@
     }
 
     // Engine 1: Multi-Signal Weighted Heuristic Scoring Engine (Primary / Default)
-    const threshold = SENSITIVITY_THRESHOLDS[settings.sensitivity] || 0.45;
+    const threshold = SENSITIVITY_THRESHOLDS[settings.sensitivity] || 0.50;
     let scoreResult = { score: 0, isBlocked: false, reasons: [] };
 
     if (settings.engineScoring !== false && window.NoSlopScoring) {
       scoreResult = window.NoSlopScoring.calculate(meta, compiledKeywordRegexes, {
         blockSyntheticDisclosures: settings.blockSyntheticDisclosures,
+        whitelistVerified: settings.whitelistVerified !== false,
         sensitivityThreshold: threshold
       });
 
@@ -254,9 +262,10 @@
       }
     }
 
-    // Engine 2: Thumbnail Visual & Texture Analysis (For borderline items)
-    if (settings.engineThumbnails !== false && window.NoSlopThumbnail && meta.thumbnailImg) {
-      if (scoreResult.score >= 0.20) {
+    // Engine 2: Thumbnail Visual & Texture Analysis (ONLY IF EXPLICITLY ENABLED)
+    // Disabled by default because human creators (Neil deGrasse Tyson, Steven Bartlett) use AI thumbnails!
+    if (settings.engineThumbnails && window.NoSlopThumbnail && meta.thumbnailImg && !meta.isVerified) {
+      if (scoreResult.score >= 0.25) {
         const thumbResult = await window.NoSlopThumbnail.analyze(meta.thumbnailImg);
         if (thumbResult.score > 0) {
           const combinedScore = Number((scoreResult.score + thumbResult.score).toFixed(3));
@@ -273,7 +282,7 @@
 
     // Shorts filter
     if (settings.blockShorts && meta.isShort) {
-      const shortsAiRegex = /(#ai|ai animation|midjourney|sora|runway|elevenlabs)/i;
+      const shortsAiRegex = /(#ai(story|drama|animation|art|film)|ai animation|sora ai|kling ai)/i;
       if (shortsAiRegex.test(meta.title) || shortsAiRegex.test(meta.cardText)) {
         return { isBlocked: true, score: 0.90, reason: 'AI Short' };
       }
@@ -335,9 +344,6 @@
     } catch {}
   }
 
-  /**
-   * Action Bar on Hover: 1-Click Local Block & Report to GitHub Community
-   */
   function injectQuickBlockAction(rootCard, meta) {
     if (!meta.channelName || rootCard.querySelector('.noslop-action-bar')) return;
 
@@ -382,11 +388,9 @@
       e.preventDefault();
       e.stopPropagation();
       
-      // Block locally immediately without second thought!
       addChannelToBlocklist(meta.channelName);
       showToast(`Blocked locally! Opening GitHub submission...`);
 
-      // Open pre-filled GitHub Issue
       const watchUrl = meta.videoId ? `https://www.youtube.com/watch?v=${meta.videoId}` : window.location.href;
       const ghUrl = `https://github.com/pranav256/block-ai-slop/issues/new?template=report-slop.yml&title=${encodeURIComponent(`[Slop Report]: ${meta.channelName} - ${(meta.fullUntruncatedTitle || meta.title).slice(0, 45)}`)}&channel_name=${encodeURIComponent(meta.channelName)}&channel_url=${encodeURIComponent(meta.channelHref ? `https://www.youtube.com${meta.channelHref}` : '')}&video_title=${encodeURIComponent(meta.fullUntruncatedTitle || meta.title)}&video_url=${encodeURIComponent(watchUrl)}`;
 
@@ -484,7 +488,7 @@
         rootCard.style.removeProperty('overflow');
         injectQuickBlockAction(rootCard, meta);
         console.log(
-          `%c[NoSlop ALLOWED]%c "${(meta.fullUntruncatedTitle || meta.title).slice(0, 42)}" %c(Score: ${evalResult.score}) [${meta.channelName}]`,
+          `%c[NoSlop ALLOWED]%c "${(meta.fullUntruncatedTitle || meta.title).slice(0, 42)}" %c(Score: ${evalResult.score}) [${meta.channelName}${meta.isVerified ? ' ✔' : ''}]`,
           'color: #10b981; font-weight: bold',
           'color: #94a3b8',
           'color: #64748b'
@@ -500,13 +504,17 @@
   }
 
   /**
-   * Watch page protection: Deep scan for YouTube's AI Info button & disclosures
+   * Watch page protection
    */
   function checkWatchPage() {
     if (!settings.enabled || !window.location.pathname.startsWith('/watch')) return;
 
     setTimeout(() => {
-      // 1. Direct check for YouTube's AI Info Button on Watch Page
+      const isVerified = Boolean(document.querySelector(
+        'ytd-channel-name [aria-label="Verified"], ytd-channel-name [aria-label*="Verified" i], .badge-style-type-verified'
+      ));
+
+      // 1. Direct check for YouTube's AI Info Button on Watch Page (Always checked)
       const aiButton = document.querySelector(
         'button[aria-label*="How this content was made" i], button[aria-label*="Altered or synthetic" i], button[aria-label*="Made with AI" i], [target-id*="disclosure" i], ytd-video-description-infocards-section-renderer'
       );
@@ -515,8 +523,6 @@
         return;
       }
 
-      const titleEl = document.querySelector('h1.ytd-watch-metadata yt-formatted-string, #title h1');
-      const title = titleEl?.textContent || document.title || '';
       const descEl = document.querySelector('#description-inner, #structured-description, ytd-structured-description-content-renderer');
       const desc = descEl?.textContent || '';
       const channelEl = document.querySelector('ytd-channel-name, #channel-name');
@@ -533,6 +539,11 @@
           triggerWatchBlock(commCheck.source);
           return;
         }
+      }
+
+      // Verified channels are safe from audio/script heuristics unless user blocked them
+      if (isVerified && settings.whitelistVerified !== false) {
+        return;
       }
 
       if (settings.engineAudioScript !== false && window.NoSlopAudioScript) {
@@ -568,7 +579,7 @@
             <circle cx="12" cy="12" r="10"></circle>
             <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line>
           </svg>
-          <span><strong>NoSlop:</strong> Video paused — Identified by YouTube as altered/synthetic media (${reason}).</span>
+          <span><strong>NoSlop:</strong> Video paused — Identified as synthetic / AI slop (${reason}).</span>
         </div>
         <button type="button" class="noslop-watch-banner-btn" id="noslop-play-anyway">Play anyway</button>
       `;
