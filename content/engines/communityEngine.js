@@ -11,6 +11,11 @@
   // Seeded core drama mills and patterns for instantaneous offline zero-latency matching
   const SEEDED_DRAMA_MILLS = new Set([
     "nov drama",
+    "velvet romance",
+    "drama diary",
+    "tempting dramas",
+    "next episode drama",
+    "dunvaris",
     "hero ai dramas",
     "hero al dramas",
     "tale time",
@@ -55,7 +60,22 @@
     "microdrama",
     "vigloo",
     "shortswave",
-    "minishort"
+    "minishort",
+    "stoic mindset ai",
+    "dark mindset daily",
+    "shadow wisdom ai",
+    "sigma mindset daily",
+    "dark psychology daily",
+    "wisdom pulse ai",
+    "stoic matrix",
+    "ancient stoic ai",
+    "cosmo space ai",
+    "mystery space hub",
+    "facts pulse ai",
+    "reddit stories daily",
+    "reddit updates ai",
+    "ai music hub",
+    "ai hustle lab"
   ]);
 
   let userBlockedChannels = new Set();

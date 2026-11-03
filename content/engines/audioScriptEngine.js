@@ -97,6 +97,6 @@
 
   window.NoSlopAudioScript = {
     analyzeScript: analyzeScriptPerplexity,
-    monitorAudio: monitorAudioCadence
+    monitorAudio: () => {} // Safe no-op, zero playback interference
   };
 })();
