@@ -11,7 +11,7 @@
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/pranav256/block-ai-slop/pulls)
 [![Browser Support](https://img.shields.io/badge/Browsers-Chrome%20%7C%20Brave%20%7C%20Edge%20%7C%20Arc-orange.svg)](#installation)
 
-[Features](#key-features) • [Creator Safety](#creator-safety--zero-false-positives) • [How It Works](#how-the-engines-work) • [Installation](#installation-takes-15-seconds) • [Crowdsource Reporting](#crowdsource-reporting--community-sync) • [Contributing](#contributing)
+[Features](#key-features) • [Creator Safety](#creator-safety--zero-false-positives) • [How It Works](#how-the-engines-work) • [Installation](#installation) • [Chrome Web Store Submission](CHROME_STORE_SUBMISSION_GUIDE.md) • [Privacy Policy](PRIVACY.md) • [Contributing](#contributing)
 
 </div>
 
@@ -144,8 +144,15 @@ block-ai-slop/
 │   ├── popup.css                       # Graphite design & hairline borders
 │   └── popup.js                        # Settings & rule management
 ├── scripts/
-│   └── update-community-blocklist.js   # Automated aggregator for upstream community blocklists
+│   ├── update-community-blocklist.js   # Automated aggregator for upstream community blocklists
+│   ├── generate-cws-assets.js          # Generator for store promotional graphics & screenshots
+│   └── build-extension-zip.js          # Automated CWS release packaging script
+├── store_assets/                       # 1280x800 screenshots and 920x680/440x280 promo tiles
+├── dist/                               # Production ZIP archive ready for CWS upload
 ├── icons/                              # 16px, 48px, 128px PNGs & SVG
+├── PRIVACY.md                          # Chrome Web Store compliant privacy policy
+├── CWS_STORE_LISTING.md                # Pre-formatted store copy & permission justifications
+├── CHROME_STORE_SUBMISSION_GUIDE.md    # Step-by-step developer console submission walkthrough
 └── README.md
 ```
 
