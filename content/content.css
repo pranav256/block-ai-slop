@@ -4,14 +4,14 @@
    ========================================================================== */
 
 /* Hard block: completely collapse and hide element from YouTube feeds & search */
-.noslop-hidden,
-[data-noslop-status="blocked"],
-ytd-rich-item-renderer[data-noslop-status="blocked"],
-ytd-video-renderer[data-noslop-status="blocked"],
-ytd-compact-video-renderer[data-noslop-status="blocked"],
-ytd-grid-video-renderer[data-noslop-status="blocked"],
-ytd-reel-item-renderer[data-noslop-status="blocked"],
-yt-lockup-view-model[data-noslop-status="blocked"] {
+.noslop-hidden:not([data-noslop-status="revealed"]):not(.noslop-revealed),
+[data-noslop-status="blocked"]:not([data-noslop-status="revealed"]):not(.noslop-revealed),
+ytd-rich-item-renderer[data-noslop-status="blocked"]:not([data-noslop-status="revealed"]):not(.noslop-revealed),
+ytd-video-renderer[data-noslop-status="blocked"]:not([data-noslop-status="revealed"]):not(.noslop-revealed),
+ytd-compact-video-renderer[data-noslop-status="blocked"]:not([data-noslop-status="revealed"]):not(.noslop-revealed),
+ytd-grid-video-renderer[data-noslop-status="blocked"]:not([data-noslop-status="revealed"]):not(.noslop-revealed),
+ytd-reel-item-renderer[data-noslop-status="blocked"]:not([data-noslop-status="revealed"]):not(.noslop-revealed),
+yt-lockup-view-model[data-noslop-status="blocked"]:not([data-noslop-status="revealed"]):not(.noslop-revealed) {
   display: none !important;
   visibility: hidden !important;
   height: 0px !important;
@@ -22,6 +22,27 @@ yt-lockup-view-model[data-noslop-status="blocked"] {
   overflow: hidden !important;
   opacity: 0 !important;
   pointer-events: none !important;
+}
+
+/* User clicked 'Show' on placeholder */
+[data-noslop-status="revealed"],
+.noslop-revealed,
+ytd-rich-item-renderer[data-noslop-status="revealed"],
+ytd-video-renderer[data-noslop-status="revealed"],
+ytd-compact-video-renderer[data-noslop-status="revealed"],
+ytd-grid-video-renderer[data-noslop-status="revealed"],
+ytd-reel-item-renderer[data-noslop-status="revealed"],
+yt-lockup-view-model[data-noslop-status="revealed"] {
+  display: block !important;
+  visibility: visible !important;
+  height: auto !important;
+  min-height: initial !important;
+  max-height: none !important;
+  margin: initial !important;
+  padding: initial !important;
+  overflow: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
 }
 
 /* Soft block: subtle collapsed placeholder bar */
@@ -94,71 +115,64 @@ yt-lockup-view-model[data-noslop-status="blocked"] {
   background-color: rgba(56, 189, 248, 0.12);
 }
 
-/* Hover Action Bar: Block Channel & Report to GitHub */
-.noslop-card-relative {
-  position: relative !important;
-}
-
-.noslop-action-bar {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 1000;
+/* ==========================================================================
+   Always-Accessible 1-Click Quick Actions (No hidden hover games!)
+   ========================================================================== */
+.noslop-title-actions {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px;
-  background-color: rgba(15, 23, 42, 0.92);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 6px;
-  opacity: 0;
-  pointer-events: none;
+  gap: 6px;
+  margin-left: 6px;
+  vertical-align: middle;
+  opacity: 0.85;
   transition: opacity 0.15s ease, transform 0.15s ease;
-  transform: translateY(-2px);
 }
 
-ytd-rich-item-renderer:hover .noslop-action-bar,
-ytd-video-renderer:hover .noslop-action-bar,
-ytd-compact-video-renderer:hover .noslop-action-bar,
-ytd-grid-video-renderer:hover .noslop-action-bar,
-yt-lockup-view-model:hover .noslop-action-bar {
+.noslop-title-actions:hover {
   opacity: 1;
-  pointer-events: auto;
-  transform: translateY(0);
 }
 
-.noslop-action-btn {
+.noslop-title-btn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 4px 8px;
-  background: transparent;
-  border: none;
-  border-radius: 4px;
+  padding: 3px 8px;
+  background-color: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: 11px;
   font-weight: 500;
   color: #cbd5e1;
   cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  line-height: 1;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
 }
 
-.noslop-action-btn:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+.noslop-title-btn:hover {
+  background-color: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.28);
   color: #ffffff;
+  transform: translateY(-1px);
 }
 
-.noslop-action-btn.report-btn:hover {
-  background-color: rgba(244, 63, 94, 0.2);
+.noslop-title-btn.noslop-report-btn:hover {
+  background-color: rgba(244, 63, 94, 0.22);
+  border-color: rgba(244, 63, 94, 0.5);
   color: #fb7185;
 }
 
-.noslop-action-btn svg {
-  width: 13px;
-  height: 13px;
+.noslop-title-btn.noslop-report-btn:hover {
+  background-color: rgba(244, 63, 94, 0.15);
+  border-color: rgba(244, 63, 94, 0.35);
+  color: #fb7185;
+}
+
+.noslop-title-btn svg {
+  width: 12px;
+  height: 12px;
   stroke: currentColor;
-  stroke-width: 1.75;
+  stroke-width: 2;
   fill: none;
 }
 
@@ -187,47 +201,4 @@ yt-lockup-view-model:hover .noslop-action-bar {
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Watch page blocking banner */
-.noslop-watch-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin: 12px 0;
-  padding: 12px 16px;
-  background-color: #0f172a;
-  border: 1px solid rgba(244, 63, 94, 0.3);
-  border-radius: 8px;
-  color: #f8fafc;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  font-size: 13px;
-}
 
-.noslop-watch-banner-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.noslop-watch-banner-icon {
-  width: 20px;
-  height: 20px;
-  stroke: #f43f5e;
-  stroke-width: 2;
-  fill: none;
-  flex-shrink: 0;
-}
-
-.noslop-watch-banner-btn {
-  background-color: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: #f8fafc;
-  padding: 6px 12px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.noslop-watch-banner-btn:hover {
-  background-color: rgba(255, 255, 255, 0.2);
-}
