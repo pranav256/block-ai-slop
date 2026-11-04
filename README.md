@@ -5,7 +5,7 @@
 **Eliminate AI-generated slop, synthetic media disclosures, and automated drama mills from YouTube feeds without blocking legitimate human creators.**
 
 [![Manifest V3](https://img.shields.io/badge/Manifest-V3-blue.svg)](https://developer.chrome.com/docs/extensions/mv3/intro/)
-[![Version](https://img.shields.io/badge/version-2.6.0-rose.svg)](#)
+[![Version](https://img.shields.io/badge/version-5.0.0-rose.svg)](#)
 [![Blocklist Size](https://img.shields.io/badge/community%20blocklist-46k%2B%20channels-blueviolet.svg)](community-blocklist.json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/pranav256/block-ai-slop/pulls)
@@ -52,11 +52,17 @@ flowchart TD
 ```
 
 ### 1. Multi-Signal Bayesian Scoring Engine *(Primary / Default ON)*
-Accumulates independent probability signals ($P \in [0.0, 1.0]$) to catch sneaky videos without false positives:
+Accumulates independent probability signals ($P \in [0.0, 1.0]$) to catch sneaky videos across all genres without false positives:
 * **YouTube Official AI Info Button**: Catches native *"How this content was made"*, *"Altered or synthetic"*, and *"Made with AI"* labels (Weight: `1.0`).
-* **Greedy AI Slop Hashtags**: Matches `/#ai(story|drama|film|art|video|animation|generated)\b/i` (`#AIStory`, `#AIDrama`, `#AIFilm`).
-* **Automated Script Disclaimers**: Detects boilerplate injected by script generators (*"complies with EDSA standards"*, *"not a real-life scenario"*).
-* **Melodrama Plot Formulas**: Flags automated content tropes (*"She called security on her ex... then the chairman"*, *"He made his wife a billionaire"*, *"Useless son-in-law is the Dragon King"*).
+* **Greedy AI Slop Hashtags**: Matches `#AIStory`, `#AIDrama`, `#AIFilm`, `#AIPhilosophy`, `#StoicAI`, `#AIFacts`.
+* **Automated Script Disclaimers**: Detects boilerplate injected by script generators (*"complies with EDSA standards"*, *"voice generated with ElevenLabs"*, *"images created with Midjourney"*, *"ChatGPT automated narration"*).
+* **Multi-Domain Slop Plot & Clickbait Formulas**:
+  * **Melodrama Mills**: Flagged tropes (*"She called security on her ex... then the chairman"*, *"He made his wife a billionaire"*, *"Useless son-in-law is the Dragon King"*).
+  * **Philosophy & Pseudo-Stoic / Dark Psychology**: Flags fake wisdom (*"Marcus Aurelius: 7 rules to become dangerous / cold and emotionless"*, *"Dark psychology manipulation tricks to make her obsessed"*, *"Carl Jung: Integrate your shadow before it destroys you"*, *"Sigma male unspoken rules"*).
+  * **Sensational Science & Space**: Flags automated clickbait (*"James Webb detected something that broke physics"*, *"Why scientists are terrified of Antarctica"*).
+  * **Reddit TTS Loops**: Catches automated `r/AITA` cheating loops with ElevenLabs narration.
+  * **Brainrot Facts & Money Hustle**: Catches *"Random facts that might save your life"*, *"How I made $12k in 7 days with ChatGPT autopilot"*.
+* **Educational Creator Whitelist**: Automatic immunity for verified thinkers (*Einzelgänger*, *Pursuit of Wonder*, *Philosophize This!*, *Academy of Ideas*, *Daily Stoic*, *Veritasium*, *Kurzgesagt*).
 * **Homoglyph Normalization**: Normalizes character replacements (e.g. `Hero Al` with lowercase `l` $\rightarrow$ `Hero AI`).
 
 ### 2. Community Consensus Engine (46,800+ Verified Channels)
