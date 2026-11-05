@@ -3,7 +3,7 @@
 This step-by-step guide walks you through publishing **NoSlop** to the official **Google Chrome Web Store**.
 
 Everything you need has been prepared and generated in your repository:
-* 📦 **Production ZIP:** [`dist/noslop-v2.6.0-chrome-web-store.zip`](dist/noslop-v2.6.0-chrome-web-store.zip) *(463 KB, Manifest V3 strictly validated)*
+* 📦 **Production ZIP:** [`dist/noslop-v5.0.0-chrome-web-store.zip`](dist/noslop-v5.0.0-chrome-web-store.zip) *(Manifest V3 strictly validated)*
 * 🎨 **Store Graphics:** [`store_assets/`](store_assets) *(Tiles & Screenshots at exact 1280x800, 920x680, and 440x280 resolutions)*
 * 📜 **Privacy Policy:** [`PRIVACY.md`](PRIVACY.md) *(Mandatory for CWS approval)*
 * 📋 **Copy-Paste Listing Text:** [`CWS_STORE_LISTING.md`](CWS_STORE_LISTING.md)
@@ -23,7 +23,7 @@ Everything you need has been prepared and generated in your repository:
 1. On your Developer Dashboard, click the blue **"New Item"** button in the top-right corner.
 2. In the upload dialog, drag and drop the ready-to-publish ZIP file:
    ```
-   d:\block-ai-slop\dist\noslop-v2.6.0-chrome-web-store.zip
+   d:\block-ai-slop\dist\noslop-v5.0.0-chrome-web-store.zip
    ```
 3. The dashboard will automatically unpack the ZIP, validate `manifest.json`, and create your draft store listing.
 
@@ -40,7 +40,7 @@ In the left sidebar, click **"Store listing"**:
   ```
 * **Summary (126 chars):**
   ```
-  Block AI-generated slop, synthetic media, and automated drama channels on YouTube with community blocklists and smart scoring.
+  Detect low-effort generated content on YouTube with local statistical scoring and optional model training data.
   ```
 * **Description:**
   Copy and paste the full formatted markdown description from [`CWS_STORE_LISTING.md`](CWS_STORE_LISTING.md#2-detailed-store-description-copy--paste).
@@ -50,7 +50,7 @@ Upload the pre-rendered graphics from the `store_assets/` and `icons/` folders:
 * **Store Icon:** Upload `icons/icon128.png` (128 × 128 px).
 * **Screenshots (1280 × 800 px):**
   * Screenshot 1: Upload `store_assets/screenshot-1-1280x800.png` (Clean YouTube feed & AdBlock hiding)
-  * Screenshot 2: Upload `store_assets/screenshot-2-1280x800.png` (Control panel & 46,800+ community blocklist)
+  * Screenshot 2: Upload `store_assets/screenshot-2-1280x800.png` (Control panel & model training data)
 * **Promotional Tiles:**
   * **Small promo tile (440 × 280 px):** Upload `store_assets/promo-small-440x280.png`.
   * **Large promo tile (920 × 680 px):** Upload `store_assets/promo-large-920x680.png`.
@@ -68,14 +68,14 @@ In the left sidebar, click **"Privacy practices"**:
 ### 1. Single Purpose Description
 Enter:
 ```
-NoSlop has a single focused purpose: to detect and remove low-effort, AI-generated spam, synthetic media disclosures, and automated story channels from YouTube feeds and search results.
+NoSlop has a single focused purpose: to score and hide low-effort generated content using local statistical analysis on YouTube feeds and search results.
 ```
 
 ### 2. Permission Justifications
 Copy and paste each justification exactly:
 * **`storage` & `unlimitedStorage`:**
   ```
-  Required to store user filter preferences (sensitivity, engine toggles, custom keyword rules) and to store the bundled offline community blocklist of 46,800+ known AI slop channels locally in memory without hitting browser quota restrictions.
+  Required to store user filter preferences, sensitivity, personal overrides, and optional local model training data without hitting browser quota restrictions.
   ```
 * **`tabs`:**
   ```
@@ -83,11 +83,11 @@ Copy and paste each justification exactly:
   ```
 * **`alarms`:**
   ```
-  Used to schedule the community blocklist refresh every 6 hours without keeping a persistent polling loop running.
+  Used to schedule optional model training data refresh every 6 hours without keeping a persistent polling loop running.
   ```
 * **Host Permission (`*://*.youtube.com/*`):**
   ```
-  Required to run content scripts on YouTube pages to inspect video metadata (titles, channel names, and native YouTube 'Altered or synthetic' disclosure badges) and remove detected AI slop elements from the DOM.
+  Required to run content scripts on YouTube pages to inspect video metadata and hide cards whose statistical score exceeds the selected threshold.
   ```
 * **Host Permissions (`*://*.ytimg.com/*` and `*://*.ggpht.com/*`):**
   ```

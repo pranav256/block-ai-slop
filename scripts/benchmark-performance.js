@@ -25,32 +25,10 @@ vm.createContext(sandbox);
 vm.runInContext(communityCode, sandbox);
 vm.runInContext(scoringCode, sandbox);
 
-// Initialize community engine with full 46,800+ channels
-sandbox.window.NoSlopCommunity.init([], blocklistData.channels, blocklistData.videoIds);
+// Initialize the statistical model with the bundled training corpus.
+sandbox.window.NoSlopCommunity.init([], blocklistData.channels, []);
 
 const calculateScore = sandbox.window.NoSlopScoring.calculateScore;
-const isChannelBlocked = sandbox.window.NoSlopCommunity.isChannelBlocked;
-
-// Compile Keywords
-const DEFAULT_KEYWORDS = [
-  "ai generated", "ai-generated", "ai drama", "ai-drama", "ai dub", "ai dubbed",
-  "ai romance", "ai series", "ai recap", "ai video", "ai animation", "ai animated",
-  "ai film", "ai movie", "ai story", "ai stories", "ai voice", "ai cover", "ai song",
-  "ai slop", "made with ai", "created with ai", "minidrama", "mini drama", "short drama",
-  "sora", "kling", "runway gen", "runwayml", "elevenlabs", "luma dream machine", "pika labs",
-  "flux.1", "flux ai", "haiper", "stable diffusion", "stablediffusion", "deepfake",
-  "synthesia", "heygen", "minimax", "hailuo", "suno ai", "udio ai",
-  "ai philosophy", "ai stoic", "ai stoicism", "ai quotes", "ai motivation", "ai psychology",
-  "dark psychology ai", "faceless channel", "chatgpt stories", "reddit ai", "ai facts"
-];
-
-function buildKeywordRegex(kw) {
-  const clean = kw.trim();
-  const escaped = clean.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  if (escaped.startsWith('#')) return new RegExp('(?:^|[^\\w])' + escaped + '(?=[^\\w]|$)', 'iu');
-  return new RegExp('\\b' + escaped.replace(/\s+/g, '[\\s_-]+') + '\\b', 'iu');
-}
-const compiled = DEFAULT_KEYWORDS.map(buildKeywordRegex).filter(Boolean);
 
 // Measure Memory After Engine & 46k Database Loaded
 const loadedMem = process.memoryUsage();
@@ -58,7 +36,7 @@ const heapUsedMB = (loadedMem.heapUsed - baseMem.heapUsed) / (1024 * 1024);
 const rssUsedMB = (loadedMem.rss - baseMem.rss) / (1024 * 1024);
 
 console.log('\n📊 1. MEMORY FOOTPRINT (RAM USAGE):');
-console.log(`   - 46,800+ Channel Community Database in Hash Set: ~${heapUsedMB.toFixed(2)} MB heap`);
+console.log(`   - Statistical model and training corpus:             ~${heapUsedMB.toFixed(2)} MB heap`);
 console.log(`   - Total Process RSS (V8 + Strings + Regexes):      ~${rssUsedMB.toFixed(2)} MB`);
 console.log(`   - Chrome Service Worker typical idle memory:       ~15 - 25 MB`);
 console.log(`   - Content script memory overhead in YouTube tab:   ~4 - 8 MB`);
@@ -130,8 +108,7 @@ const sampleCards = [
 // Warmup JIT
 for (let i = 0; i < 500; i++) {
   const c = sampleCards[i % sampleCards.length];
-  isChannelBlocked(c.channelName);
-  calculateScore(c, compiled, { sensitivityThreshold: 0.50, whitelistVerified: true });
+  calculateScore(c, { sensitivityThreshold: 0.50 });
 }
 
 // Benchmark 5,000 Evaluations
@@ -140,10 +117,7 @@ const start = performance.now();
 
 for (let i = 0; i < ITERATIONS; i++) {
   const card = sampleCards[i % sampleCards.length];
-  const comm = isChannelBlocked(card.channelName);
-  if (!comm.blocked) {
-    calculateScore(card, compiled, { sensitivityThreshold: 0.50, whitelistVerified: true });
-  }
+  calculateScore(card, { sensitivityThreshold: 0.50 });
 }
 
 const elapsedMs = performance.now() - start;

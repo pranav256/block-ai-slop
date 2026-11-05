@@ -53,7 +53,6 @@
   }
 
   window.NoSlopAudioScript = {
-    analyzeScript: analyzeScriptPerplexity,
-    monitorAudio: () => {}
+    analyzeScript: analyzeScriptPerplexity
   };
 })();

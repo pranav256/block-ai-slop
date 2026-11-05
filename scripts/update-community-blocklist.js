@@ -135,22 +135,6 @@ async function buildCommunityBlocklist() {
     maintainer: "pranav256",
     channelsCount: sortedChannels.length,
     channels: sortedChannels,
-    videoIds: [],
-    slopKeywords: [
-      "#aistory",
-      "#aidrama",
-      "#aifilm",
-      "#aivideo",
-      "#aianimation",
-      "complies with edsa standards",
-      "not a real-life scenario",
-      "unaware he was the most feared",
-      "she called security on her ex",
-      "made his wife a billionaire",
-      "feared the mafia don",
-      "he was the most feared",
-      "x-ray vision, crushes rich clans"
-    ]
   };
 
   const targetPath = path.join(__dirname, '..', 'community-blocklist.json');

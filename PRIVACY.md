@@ -3,7 +3,7 @@
 **Last updated:** November 2, 2026
 
 ## 1. Overview
-NoSlop ("we", "our", or "the extension") is an open-source browser extension developed to hide and filter out low-effort, AI-generated content, synthetic media disclosures, and automated story mills on YouTube.
+NoSlop ("we", "our", or "the extension") is an open-source browser extension developed to score and hide low-effort generated content on YouTube using local statistical analysis.
 
 We believe your browsing activity is your private business. **NoSlop does NOT collect, track, store, or sell any personal information or browsing history.**
 
@@ -21,7 +21,7 @@ We believe your browsing activity is your private business. **NoSlop does NOT co
 All detection mechanisms operate strictly on your local machine inside the browser:
 * **DOM Inspection:** The content script inspects video titles, channel names, and YouTube's native metadata disclaimers (e.g., "Altered or synthetic content") directly within the active YouTube tab to calculate whether a card is AI-generated slop.
 * **Local In-Memory Evaluation:** Metadata strings are evaluated in RAM using regular expressions and hash set lookups. Once a video card is evaluated, the result is cached only for the duration of the page session.
-* **No Server Processing:** Video titles or URLs are never transmitted to any external server or LLM for processing.
+* **No Server Processing:** Detection is local. If you click **Report Slop**, the selected channel and video details are placed in a pre-filled GitHub issue; otherwise video titles and URLs are not transmitted.
 
 ---
 
@@ -30,9 +30,9 @@ Under Google Chrome Web Store Developer Policies, NoSlop requests only the minim
 
 | Permission | Purpose |
 | :--- | :--- |
-| `storage` & `unlimitedStorage` | Used strictly to store your filter toggles, sensitivity threshold, custom keywords, and the offline community blocklist locally on your device. |
+| `storage` & `unlimitedStorage` | Used strictly to store your filter toggles, sensitivity threshold, user overrides, and optional local model training data. |
 | `tabs` | Used solely to update the extension action badge with the count of blocked videos on the current active YouTube tab. |
-| `alarms` | Used to schedule the background community blocklist refresh every 6 hours without keeping a polling loop alive. |
+| `alarms` | Used to schedule optional model training-data refresh every 6 hours without keeping a polling loop alive. |
 | Host: `*://*.youtube.com/*` | Required to run content scripts on YouTube pages to detect and hide AI video elements. |
 | Host: `*://*.ytimg.com/*` & `*://*.ggpht.com/*` | Required solely to fetch thumbnail images in-memory via HTML5 Canvas if the user explicitly enables the experimental visual texture engine. |
 
@@ -40,14 +40,16 @@ Under Google Chrome Web Store Developer Policies, NoSlop requests only the minim
 
 ## 5. Network Requests & Third-Party Services
 The extension makes only one type of external network request:
-* **GitHub Community Blocklist Sync:** Every 6 hours (or when you click "Sync Now" in the control panel), the background service worker sends an HTTP GET request to:
+* **GitHub Training Data Sync:** Every 6 hours (or when you click "Sync Now" in the control panel), the background service worker sends an HTTP GET request to:
   `https://raw.githubusercontent.com/pranav256/block-ai-slop/main/community-blocklist.json`
   This request retrieves the latest public list of crowdsourced AI channels. No user identifier, token, or search history is attached to this request.
+
+* **Optional Reports:** Clicking **Report Slop** opens GitHub with the selected channel name, channel URL, video title, and video URL in the issue form. Reports are also kept in a local queue until you export them as JSON. No report is submitted automatically by NoSlop.
 
 ---
 
 ## 6. Open Source Transparency
-NoSlop is entirely open-source under the MIT License. The complete source code, build scripts, and blocklists can be independently audited at:
+NoSlop is entirely open-source under the MIT License. The complete source code, build scripts, and training data can be independently audited at:
 [https://github.com/pranav256/block-ai-slop](https://github.com/pranav256/block-ai-slop)
 
 ---

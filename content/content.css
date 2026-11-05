@@ -1,8 +1,7 @@
 /* ==========================================================================
-   NoSlop - Content Styles (v2.4)
+   NoSlop - Content Styles (v5.0)
    Strict unslop principles: hairline borders, neutral graphite, quiet chrome
    ========================================================================== */
-
 /* Hard block: completely collapse and hide element from YouTube feeds & search */
 .noslop-hidden:not([data-noslop-status="revealed"]):not(.noslop-revealed),
 [data-noslop-status="blocked"]:not([data-noslop-status="revealed"]):not(.noslop-revealed),
@@ -174,12 +173,6 @@ yt-lockup-view-model[data-noslop-status="revealed"] {
   color: #fb7185;
 }
 
-.noslop-title-btn.noslop-report-btn:hover {
-  background-color: rgba(244, 63, 94, 0.15);
-  border-color: rgba(244, 63, 94, 0.35);
-  color: #fb7185;
-}
-
 .noslop-title-btn svg {
   width: 12px;
   height: 12px;
@@ -212,5 +205,3 @@ yt-lockup-view-model[data-noslop-status="revealed"] {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
-
-

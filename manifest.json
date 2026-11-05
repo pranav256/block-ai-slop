@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "NoSlop - AI Video Blocker for YouTube",
   "version": "5.0.0",
-  "description": "Block AI-generated slop, synthetic media, and automated drama channels on YouTube with community blocklists and smart scoring.",
+  "description": "Detect low-effort AI content on YouTube with local statistical scoring and optional model training data.",
   "permissions": [
     "storage",
     "unlimitedStorage",

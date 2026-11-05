@@ -63,81 +63,54 @@
   ];
   const ROOT_CONTAINER_SELECTOR_TEXT = ROOT_CONTAINER_SELECTORS.join(', ');
 
-  // These are deliberately compound or context-gated signals. A bare "AI"
-  // or a generator product name is not evidence that a video is synthetic.
-  const DEFAULT_KEYWORDS = [
-    'ai generated', 'ai-generated', 'ai drama', 'ai-drama', 'full ai drama',
-    'ai dub', 'ai dubbed', 'ai romance', 'ai series', 'ai recap', 'ai video',
-    'ai animation', 'ai animated', 'ai film', 'ai movie', 'ai story',
-    'ai stories', 'ai voice', 'ai cover', 'ai song', 'ai slop',
-    'made with ai', 'created with ai', 'minidrama', 'mini drama',
-    'short drama', 'micro drama', 'sora', 'kling', 'runway gen', 'runwayml',
-    'elevenlabs', 'luma dream machine', 'pika labs', 'flux.1',
-    'flux ai', 'haiper', 'stable diffusion', 'stablediffusion',
-    'deepfake', 'synthesia', 'heygen', 'minimax', 'hailuo', 'suno ai',
-    'udio ai', 'ai philosophy', 'ai stoic', 'ai stoicism', 'ai quotes',
-    'ai motivation', 'ai psychology', 'dark psychology ai',
-    'faceless channel', 'chatgpt stories', 'reddit ai', 'ai facts',
-    'mafia banquet', 'contract marriage', 'flash marriage',
-    'tempting dramas', 'next episode drama'
-  ];
-
   let settings = {
     enabled: true,
-    engineScoring: true,        // Engine 1
+    engineScoring: true,        // Engine 1: Multi-signal heuristic & semantic scoring
     sensitivity: "balanced",
     engineThumbnails: false,    // Engine 2: DISABLED by default to protect human creators using AI art
-    whitelistVerified: true,    // Protects verified channels (StarTalk, Diary of a CEO, etc.)
-    engineCommunity: true,      // Engine 3
-    engineAudioScript: true,    // Engine 4
+    whitelistVerified: true,    // Protects verified human creators (StarTalk, Kurzgesagt, etc.)
+    engineCommunity: true,      // Engine 3: Community & curated blocklist consensus
+    engineAudioScript: true,    // Engine 4: Script perplexity & repetition analysis
     blockSyntheticDisclosures: true,
-    blockKeywords: true,
     blockShorts: false,         // FALSE by default: only AI slop shorts are blocked, human shorts stay
     placeholderMode: false,     // Clean AdBlock style (default)
-    customKeywords: [],
     blockedChannels: [],
     allowedChannels: [],
     remoteChannels: [],
     remoteVideos: []
   };
 
-  let compiledKeywordRegexes = [];
-  let blockedCountCurrentTab = 0;
-  let lastUrl = window.location.href;
   let evaluationGeneration = 0;
   const processingCards = new WeakSet();
   const hydrationRetryCounts = new WeakMap();
+  let tabCountSyncTimeout = null;
 
-  function buildKeywordRegex(kw) {
-    const clean = kw.trim();
-    if (!clean) return null;
-    const escaped = clean.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    if (escaped.startsWith('#')) {
-      return new RegExp('(?:^|[^a-zA-Z0-9])' + escaped + '(?=[^a-zA-Z0-9]|$)', 'iu');
+  function syncTabCount() {
+    tabCountSyncTimeout = null;
+    const count = document.querySelectorAll('[data-noslop-status="blocked"]').length;
+    try {
+      chrome.runtime.sendMessage({ action: 'tabCountSync', count });
+    } catch {}
+  }
+
+  function scheduleTabCountSync() {
+    if (tabCountSyncTimeout) clearTimeout(tabCountSyncTimeout);
+    tabCountSyncTimeout = setTimeout(syncTabCount, 50);
+  }
+
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.action === 'getTabCount') {
+      sendResponse({ count: document.querySelectorAll('[data-noslop-status="blocked"]').length });
     }
-    return new RegExp('\\b' + escaped.replace(/\s+/g, '[\\s_-]+') + '\\b', 'iu');
-  }
-
-  function updateCompiledKeywords() {
-    const userList = Array.isArray(settings.customKeywords) ? settings.customKeywords : [];
-    const combined = Array.from(new Set([...DEFAULT_KEYWORDS, ...userList]))
-      .filter(k => typeof k === 'string' && k.trim().toLowerCase() !== 'ai');
-    compiledKeywordRegexes = combined.map(buildKeywordRegex).filter(Boolean);
-  }
-
-  // Pre-compile default keywords synchronously on script bootstrap
-  updateCompiledKeywords();
+  });
 
   function loadSettings() {
-    updateCompiledKeywords();
     chrome.storage.sync.get(null, (syncData) => {
       if (chrome.runtime.lastError) {
         console.warn('[NoSlop] Could not read sync settings:', chrome.runtime.lastError.message);
       } else if (syncData && Object.keys(syncData).length > 0) {
         settings = { ...settings, ...syncData };
       }
-      updateCompiledKeywords();
-
       // Load 46k+ community blocklist from local storage
       chrome.storage.local.get(['remoteChannels', 'remoteVideos', 'learningExamples'], (localData) => {
         if (localData?.remoteChannels) {
@@ -146,12 +119,11 @@
         if (localData?.remoteVideos) {
           settings.remoteVideos = localData.remoteVideos;
         }
-
         if (window.NoSlopCommunity) {
           window.NoSlopCommunity.init(
             settings.blockedChannels,
-            settings.remoteChannels,
-            settings.remoteVideos,
+            settings.engineCommunity !== false ? settings.remoteChannels : [],
+            settings.remoteVideos || [],
             settings.allowedChannels
           );
         }
@@ -172,12 +144,11 @@
           masterToggledOff = true;
         }
       }
-      updateCompiledKeywords();
       if (window.NoSlopCommunity) {
         window.NoSlopCommunity.init(
           settings.blockedChannels,
-          settings.remoteChannels,
-          settings.remoteVideos,
+          settings.engineCommunity !== false ? settings.remoteChannels : [],
+          settings.remoteVideos || [],
           settings.allowedChannels
         );
       }
@@ -194,14 +165,11 @@
       if (changes.remoteChannels) {
         settings.remoteChannels = changes.remoteChannels.newValue || [];
       }
-      if (changes.remoteVideos) {
-        settings.remoteVideos = changes.remoteVideos.newValue || [];
-      }
       if (window.NoSlopCommunity) {
         window.NoSlopCommunity.init(
           settings.blockedChannels,
-          settings.remoteChannels,
-          settings.remoteVideos,
+          settings.engineCommunity !== false ? settings.remoteChannels : [],
+          settings.remoteVideos || [],
           settings.allowedChannels
         );
       }
@@ -248,6 +216,8 @@
     if (!preserveRevealed) {
       document.querySelectorAll('.noslop-title-actions').forEach((el) => el.remove());
     }
+
+    scheduleTabCountSync();
   }
 
   function findRootCard(el) {
@@ -304,7 +274,7 @@
 
     const title = titleCandidates.join(' ').replace(/\s+/g, ' ').trim();
 
-    // 2. Channel Name & Verified Status
+    // 2. Channel Name
     const channelEl = rootCard.querySelector(
       'ytd-channel-name, #channel-name, #text.ytd-channel-name, a.yt-simple-endpoint[href*="/@"], a.yt-simple-endpoint[href*="/channel/"], .yt-lockup-metadata-view-model-wiz__metadata a, #byline-container a, #channel-info, ytd-reel-player-header-renderer a'
     );
@@ -313,11 +283,6 @@
       ? channelEl
       : channelEl?.querySelector?.('a[href*="/@"], a[href*="/channel/"]');
     const channelHref = channelLink?.getAttribute('href') || channelEl?.getAttribute('href') || '';
-
-    // Check if channel has YouTube's verified badge
-    const isVerified = Boolean(rootCard.querySelector(
-      '[aria-label="Verified"], [aria-label*="Verified" i], .badge-style-type-verified, ytd-badge-supported-renderer [aria-label*="Verified"]'
-    ));
 
     // 3. Description Snippet (Search Results)
     const snippetEl = rootCard.querySelector(
@@ -331,12 +296,6 @@
     )).map(b => b.textContent).join(' ');
 
     const cardText = (rootCard.textContent || '').replace(/\s+/g, ' ').trim();
-
-    // 5. Explicit YouTube AI Info Button Check on the card (Precise UI element check only)
-    const aiInfoBtn = rootCard.querySelector(
-      'button[aria-label*="How this content was made" i], button[aria-label*="Altered or synthetic" i], [aria-label*="Altered or synthetic content" i]'
-    );
-    const hasAiInfoButton = Boolean(aiInfoBtn);
 
     const isShort = Boolean(
       rootCard.matches('ytd-reel-item-renderer, ytm-shorts-lockup-view-model-v2') ||
@@ -352,12 +311,10 @@
       videoId,
       channelName,
       channelHref,
-      isVerified,
       snippet,
       scriptText: snippet,
       badgeText,
       cardText,
-      hasAiInfoButton,
       isShort,
       thumbnailImg
     };
@@ -373,33 +330,30 @@
       return { isBlocked: false, score: 0.0, reason: 'User Allowlist' };
     }
 
-    // 1. Engine 3: Community & Curated Blocklist (Instant O(1) multi-index lookup)
+    // 1. Engine 3: Community & Curated Blocklist Consensus (Instant O(1) multi-index lookup)
     if (settings.engineCommunity !== false && window.NoSlopCommunity) {
-      if (meta.videoId && window.NoSlopCommunity.isVideoBlocked(meta.videoId)) {
+      if (meta.videoId && window.NoSlopCommunity.isVideoBlocked?.(meta.videoId)) {
         return { isBlocked: true, score: 1.0, reason: 'Community Blocklisted Video ID' };
       }
 
       const commCheck = window.NoSlopCommunity.isChannelBlocked(meta.channelName, meta.channelHref);
-      if (commCheck.blocked) {
-        return { isBlocked: true, score: 1.0, reason: commCheck.source };
+      if (commCheck?.blocked) {
+        return { isBlocked: true, score: 1.0, reason: commCheck.source || 'Community Blocklist' };
       }
     }
 
-    // 2. Engine 1: Multi-Signal Bayesian Heuristic Scoring
+    // 2. Engine 1: Multi-Signal Bayesian & Heuristic Scoring
     if (settings.engineScoring !== false && window.NoSlopScoring) {
       const scoreFn = (typeof window.NoSlopScoring.calculateScore === 'function')
         ? window.NoSlopScoring.calculateScore
         : (typeof window.NoSlopScoring.calculate === 'function' ? window.NoSlopScoring.calculate : null);
 
       if (scoreFn) {
-        const scoringResult = scoreFn(
-          meta,
-          settings.blockKeywords !== false ? compiledKeywordRegexes : [],
-          {
-            blockSyntheticDisclosures: settings.blockSyntheticDisclosures !== false,
-            whitelistVerified: settings.whitelistVerified !== false
-          }
-        );
+        const scoringResult = scoreFn(meta, {
+          sensitivityThreshold: threshold,
+          whitelistVerified: settings.whitelistVerified !== false,
+          blockSyntheticDisclosures: settings.blockSyntheticDisclosures !== false
+        });
 
         // If AI Shorts filter is toggled, enforce stricter sensitivity (0.40) on shorts, but NEVER blanket block clean human videos
         if (scoringResult && scoringResult.score >= threshold) {
@@ -412,7 +366,7 @@
       }
     }
 
-    // 3. Engine 4: lightweight script-pattern analysis. The audio engine is
+    // Generic script-pattern analysis. The analyzer is
     // intentionally metadata-only here; opening an AudioContext for every
     // feed card would interfere with playback and waste significant CPU.
     if (settings.engineAudioScript !== false && window.NoSlopAudioScript?.analyzeScript) {
@@ -421,7 +375,7 @@
         return {
           isBlocked: true,
           score: scriptResult.score,
-          reason: scriptResult.reason || 'LLM Script Pattern'
+          reason: scriptResult.reason || 'Statistical script pattern'
         };
       }
     }
@@ -429,7 +383,7 @@
     // 4. Engine 2: Thumbnail Vision Texture Scanner (Disabled by default to protect human creators)
     if (settings.engineThumbnails && window.NoSlopVision && meta.thumbnailImg) {
       const visionResult = await window.NoSlopVision.scanThumbnail(meta.thumbnailImg);
-      if (visionResult.isAI && visionResult.score >= 0.70) {
+      if (visionResult?.score >= Math.max(threshold, 0.70)) {
         return {
           isBlocked: true,
           score: visionResult.score,
@@ -441,7 +395,7 @@
     return { isBlocked: false, score: 0.0, reason: 'Clean' };
   }
 
-  function applyBlock(rootCard, meta, reason = 'AI Content', score = 1.0) {
+  function applyBlock(rootCard, meta, reason = 'AI Content') {
     if (rootCard.dataset.noslopStatus === 'revealed' || rootCard.classList.contains('noslop-revealed')) {
       return;
     }
@@ -495,6 +449,7 @@
           rootCard.style.removeProperty('opacity');
           rootCard.style.removeProperty('pointer-events');
           placeholder.remove();
+          scheduleTabCountSync();
         });
 
         rootCard.parentNode?.insertBefore(placeholder, rootCard);
@@ -513,11 +468,12 @@
 
     if (!rootCard.dataset.noslopCounted) {
       rootCard.dataset.noslopCounted = 'true';
-      blockedCountCurrentTab++;
       try {
         chrome.runtime.sendMessage({ action: 'videoBlocked', count: 1 });
       } catch {}
     }
+
+    scheduleTabCountSync();
   }
 
   /**
@@ -622,7 +578,7 @@
         chrome.storage.sync.set({ blockedChannels: list }, () => {
           settings.blockedChannels = list;
           if (window.NoSlopCommunity) {
-            window.NoSlopCommunity.init(list, settings.remoteChannels, settings.remoteVideos, settings.allowedChannels);
+            window.NoSlopCommunity.init(list, settings.remoteChannels, settings.allowedChannels);
           }
           scanFeed();
         });
@@ -720,13 +676,14 @@
       }
 
       if (evalResult.isBlocked) {
-        applyBlock(rootCard, meta, evalResult.reason, evalResult.score);
+        applyBlock(rootCard, meta, evalResult.reason);
       } else {
         clearCardVisualState(rootCard);
         rootCard.dataset.noslopStatus = 'clean';
         if (meta.channelName) {
           injectQuickBlockAction(rootCard, meta);
         }
+        scheduleTabCountSync();
       }
     } finally {
       processingCards.delete(rootCard);
@@ -762,7 +719,10 @@
    * Main scan loop: Immediately processes viewport cards; queues offscreen cards
    */
   function scanFeed() {
-    if (!settings.enabled) return;
+    if (!settings.enabled) {
+      scheduleTabCountSync();
+      return;
+    }
 
     const elements = document.querySelectorAll(CARD_SELECTOR_TEXT);
 
@@ -778,6 +738,8 @@
         cardObserver.observe(rootCard);
       }
     }
+
+    scheduleTabCountSync();
   }
 
   // DOM Mutation Observer (debounced, ignores NoSlop's own nodes to prevent feedback loops)
@@ -796,6 +758,18 @@
             }
             hasExternalNodes = true;
             break;
+          }
+        }
+        if (!hasExternalNodes) {
+          for (let j = 0; j < m.removedNodes.length; j++) {
+            const n = m.removedNodes[j];
+            if (n.nodeType === 1 && (
+              n.matches?.(CARD_SELECTOR_TEXT) ||
+              n.querySelector?.('[data-noslop-status="blocked"]')
+            )) {
+              hasExternalNodes = true;
+              break;
+            }
           }
         }
       }
@@ -845,7 +819,6 @@
 
   // Handle YouTube SPA page transitions & dynamic feed updates
   window.addEventListener('yt-navigate-finish', () => {
-    lastUrl = window.location.href;
     resetAllCards();
     setTimeout(scanFeed, 100);
     setTimeout(scanFeed, 500);

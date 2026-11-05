@@ -1,8 +1,8 @@
 /**
- * NoSlop - Engine 3: Community & Curated Blocklist Consensus (v2.6)
- * Instant O(1) multi-index hash set lookup of 46,000+ known AI slop channels,
+ * NoSlop - Engine 3: Community & Curated Blocklist Consensus (v5.1)
+ * High-performance O(1) multi-index lookup of 46,000+ known AI slop channels,
  * automated content mills, and micro-drama platforms.
- * Supports auto-syncing with centralized GitHub community-blocklist.json.
+ * Supports auto-syncing with centralized community-blocklist.json.
  */
 
 (() => {
@@ -96,8 +96,7 @@
   }
 
   // Exact lookup with one canonical string per entry and a compact 32-bit
-  // hash index. Hash collisions are always resolved by string comparison, so
-  // this remains an exact index rather than a probabilistic filter.
+  // hash index. Hash collisions are always resolved by string comparison.
   class CompactExactIndex {
     constructor(values = []) {
       const unique = Array.from(new Set(values.filter(Boolean)));
@@ -152,13 +151,19 @@
       .replace(/[оóòôõö]/g, 'o')
       .replace(/[р]/g, 'p')
       .replace(/[с]/g, 'c')
-      .replace(/\bal\b/gi, 'ai')      // Fixes 'Hero Al' typo evasion
+      .replace(/\bal\b/gi, 'ai')
       .replace(/[@\-_]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
   }
 
   function initCommunityEngine(userList = [], remoteChannels = [], remoteVideos = [], allowedList = []) {
+    // Support calling init with 3 args: (userList, remoteChannels, allowedList)
+    if (Array.isArray(remoteVideos) && allowedList.length === 0 && remoteVideos.some(x => typeof x === 'string' && x.startsWith('@'))) {
+      allowedList = remoteVideos;
+      remoteVideos = [];
+    }
+
     userBlockedChannels = new Set(
       (Array.isArray(userList) ? userList : [])
         .filter(item => typeof item === 'string')
@@ -211,7 +216,9 @@
     remoteHandles = new CompactExactIndex(handles);
     remoteChannelIds = new CompactExactIndex(channelIds);
     remoteNames = new CompactExactIndex(names);
-    window.NoSlopSemantic?.initialize?.(remoteChannels, allowedList);
+
+    // Initialize semantic model with labeled samples
+    window.NoSlopSemantic?.initialize?.(remoteChannels.slice(0, 500), allowedList);
   }
 
   function isChannelAllowed(channelName, channelHref = '') {
@@ -221,9 +228,9 @@
     if (allowedChannels.has(rawName) || allowedChannels.has(normName)) return true;
     if (channelHref) {
       const cleanHref = channelHref.split('?')[0].replace(/\/+$/, '');
-      const handleMatch = cleanHref.match(/\/@([^\/]+)/);
+      const handleMatch = cleanHref.match(/\/@([^/]+)/);
       if (handleMatch && allowedChannels.has(normalize(handleMatch[1]))) return true;
-      const idMatch = cleanHref.match(/\/channel\/([^\/]+)/);
+      const idMatch = cleanHref.match(/\/channel\/([^/]+)/);
       if (idMatch && allowedChannels.has(normalize(idMatch[1]))) return true;
     }
     return false;
@@ -233,7 +240,7 @@
     const rawName = (channelName || '').toLowerCase().trim();
     const normName = normalize(channelName);
 
-    // 1. Check user blacklisted channels
+    // 1. Check user blacklisted channels (Highest Priority)
     if (userBlockedChannels.has(rawName) || userBlockedChannels.has(normName)) {
       return { blocked: true, source: 'User Blacklist' };
     }
@@ -253,7 +260,7 @@
       const cleanHref = channelHref.split('?')[0].replace(/\/+$/, '');
 
       // Check handle (/@...)
-      const handleMatch = cleanHref.match(/\/@([^\/]+)/);
+      const handleMatch = cleanHref.match(/\/@([^/]+)/);
       if (handleMatch) {
         const handle = handleMatch[1].toLowerCase();
         if (remoteHandles.has(normalize(handle))) {
@@ -265,7 +272,7 @@
       }
 
       // Check channel ID (/channel/UC...)
-      const idMatch = cleanHref.match(/\/channel\/([^\/]+)/);
+      const idMatch = cleanHref.match(/\/channel\/([^/]+)/);
       if (idMatch) {
         const id = idMatch[1];
         if (remoteChannelIds.has(id.toLowerCase())) {

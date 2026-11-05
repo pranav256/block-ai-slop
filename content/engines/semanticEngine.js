@@ -19,8 +19,7 @@
     minimumPositiveSimilarity: 0.34,
     minimumMargin: 0.06,
     styleWeight: 0.20,
-    channelWeight: 0.25,
-    feedbackWeight: 0.35
+    channelWeight: 0.25
   });
 
   let positive = new Float64Array(DIMENSIONS);
@@ -104,9 +103,19 @@
     return `${values.length}:${values[0]}:${values[values.length - 1]}`;
   }
 
+  const DEFAULT_NEGATIVE_BASELINE = [
+    'veritasium', 'startalk', 'kurzgesagt', 'einzelganger', 'techy imran',
+    'smarter every day', 'mark rober', 'pbs space time', 'numberphile',
+    'linus tech tips', 'mkbhd', 'marques brownlee', 'dave2d', 'cleo abram'
+  ];
+
   function initialize(positiveExamples = [], negativeExamples = []) {
+    const effectiveNegative = (Array.isArray(negativeExamples) && negativeExamples.length > 0)
+      ? negativeExamples
+      : DEFAULT_NEGATIVE_BASELINE;
+
     const positiveKey = sourceKey(positiveExamples);
-    const negativeKey = sourceKey(negativeExamples);
+    const negativeKey = sourceKey(effectiveNegative);
     const nextSignature = `${positiveKey}|${negativeKey}`;
     if (nextSignature === sourceSignature) return;
     sourceSignature = nextSignature;
@@ -119,7 +128,7 @@
     for (const example of (Array.isArray(positiveExamples) ? positiveExamples : [])) {
       if (typeof example === 'string') train(example, 1);
     }
-    for (const example of (Array.isArray(negativeExamples) ? negativeExamples : [])) {
+    for (const example of effectiveNegative) {
       if (typeof example === 'string') train(example, -1);
     }
   }
@@ -199,7 +208,7 @@
     if (style.generatedStyle >= 0.55) reasons.push('Repetitive title/description structure');
 
     return {
-      score: enoughEvidence ? score : 0,
+      score,
       rawScore: score,
       isTrained: positiveCount >= 8,
       reasons,

@@ -16,7 +16,7 @@
           <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line>
         </svg>
         <div class="brand-text">
-          <span class="brand-name">NoSlop 2.5</span>
+          <span class="brand-name">NoSlop 5.0</span>
           <span class="status-indicator" id="statusBadge">Active</span>
         </div>
       </div>
@@ -66,20 +66,20 @@
           </div>
         </div>
 
-        <!-- Engine 3: Community Consensus -->
+        <!-- Model training data -->
         <label class="rule-item">
           <div class="rule-text">
-            <span class="rule-label">2. Community & curated blocklist</span>
-            <span class="rule-desc">Instant O(1) hash set matching known AI drama mills and platforms</span>
+            <span class="rule-label">2. Community training data</span>
+            <span class="rule-desc">Improves the statistical model without directly blocking by channel or name</span>
           </div>
           <input type="checkbox" id="toggleEngineCommunity" class="sub-toggle" checked>
         </label>
 
-        <!-- Engine 4: Watch Page Audio & Script -->
+        <!-- Engine 4: Script pattern analysis -->
         <label class="rule-item">
           <div class="rule-text">
-            <span class="rule-label">3. Audio cadence & script perplexity</span>
-            <span class="rule-desc">Identifies robotic TTS pause rhythms and LLM script n-grams</span>
+            <span class="rule-label">3. Script pattern analysis</span>
+            <span class="rule-desc">Identifies repetitive structure and low-diversity generated scripts</span>
           </div>
           <input type="checkbox" id="toggleEngineAudioScript" class="sub-toggle" checked>
         </label>
@@ -95,11 +95,11 @@
       </div>
     </section>
 
-    <!-- Community Blocklist Sync -->
+    <!-- Model Training Data Sync -->
     <section class="section">
       <div class="section-header">
-        <h2 class="section-title">Community blocklist</h2>
-        <span class="badge-recommended" id="communityCountBadge">36 Channels</span>
+        <h2 class="section-title">Model training data</h2>
+        <span class="badge-recommended" id="communityCountBadge">0 Examples</span>
       </div>
       <div class="community-sync-box">
         <div class="community-sync-info">
@@ -107,32 +107,16 @@
           <span class="community-sync-time" id="lastSyncTime">Syncs automatically</span>
         </div>
         <div class="community-sync-actions">
-          <button type="button" id="syncNowBtn" class="btn btn-secondary btn-sm">Sync now</button>
-          <button type="button" id="exportReportsBtn" class="btn btn-secondary btn-sm" title="Export queued channel reports as JSON">Export queue</button>
+          <button type="button" id="syncNowBtn" class="btn btn-secondary btn-sm">Sync training data</button>
+          <button type="button" id="exportReportsBtn" class="btn btn-secondary btn-sm" title="Download queued reports as a JSON file">Export JSON</button>
         </div>
       </div>
     </section>
 
-    <!-- Creator Safety & Preferences -->
+    <!-- Preferences -->
     <section class="section">
-      <h2 class="section-title">Creator safety & preferences</h2>
+      <h2 class="section-title">Preferences</h2>
       <div class="rule-list">
-        <label class="rule-item">
-          <div class="rule-text">
-            <span class="rule-label">Protect verified human creators</span>
-            <span class="rule-desc">Never block verified channels (StarTalk, DOAC, etc.) talking about AI</span>
-          </div>
-          <input type="checkbox" id="toggleWhitelistVerified" class="sub-toggle" checked>
-        </label>
-
-        <label class="rule-item">
-          <div class="rule-text">
-            <span class="rule-label">YouTube official AI info buttons</span>
-            <span class="rule-desc">Instant block when YouTube marks "How this content was made"</span>
-          </div>
-          <input type="checkbox" id="toggleSynthetic" class="sub-toggle" checked>
-        </label>
-
         <label class="rule-item">
           <div class="rule-text">
             <span class="rule-label">AI Shorts</span>
@@ -151,24 +135,10 @@
       </div>
     </section>
 
-    <!-- Lists Management (Keywords & Channels) -->
+    <!-- User Overrides -->
     <section class="section">
-      <div class="tabs-nav">
-        <button type="button" class="tab-btn active" data-tab="keywordsTab">Keywords</button>
-        <button type="button" class="tab-btn" data-tab="channelsTab">Blocked channels</button>
-      </div>
-
-      <!-- Keywords Tab Pane -->
-      <div class="tab-pane active" id="keywordsTab">
-        <div class="input-row">
-          <input type="text" id="newKeywordInput" placeholder="Add keyword (e.g. #flux, suno)..." maxlength="40">
-          <button type="button" id="addKeywordBtn" class="btn btn-secondary">Add</button>
-        </div>
-        <div class="tag-cloud" id="keywordCloud"></div>
-      </div>
-
-      <!-- Channels Tab Pane -->
-      <div class="tab-pane" id="channelsTab">
+      <h2 class="section-title">User overrides</h2>
+      <div class="rule-list">
         <div class="input-row">
           <input type="text" id="newChannelInput" placeholder="Add channel name or @handle..." maxlength="60">
           <button type="button" id="addChannelBtn" class="btn btn-secondary">Add</button>
@@ -177,7 +147,7 @@
         <div class="list-subsection">
           <div class="list-subsection-header">
             <span class="rule-label">Always allow</span>
-            <span class="rule-desc">Overrides heuristic and community matches for this channel</span>
+            <span class="rule-desc">Overrides the statistical decision for this channel</span>
           </div>
           <div class="input-row">
             <input type="text" id="newAllowedChannelInput" placeholder="Allow channel or @handle..." maxlength="60">

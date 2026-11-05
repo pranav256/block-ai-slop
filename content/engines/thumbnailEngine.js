@@ -107,8 +107,5 @@
     }
   }
 
-  window.NoSlopVision = window.NoSlopThumbnail = {
-    scanThumbnail: analyzeThumbnail,
-    analyze: analyzeThumbnail
-  };
+  window.NoSlopVision = { scanThumbnail: analyzeThumbnail };
 })();

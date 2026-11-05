@@ -1,5 +1,5 @@
 /**
- * NoSlop - Popup Script (v2.5)
+ * NoSlop - Popup Script (v5.0)
  * Protects legitimate human creators talking about AI while eliminating true AI slop mills.
  */
 
@@ -16,23 +16,17 @@ document.addEventListener('DOMContentLoaded', () => {
   const toggleEngineThumbnails = document.getElementById('toggleEngineThumbnails');
   const segmentBtns = document.querySelectorAll('.segment-btn');
 
-  // Community Sync Elements
+  // Training Data Sync Elements
   const communityCountBadge = document.getElementById('communityCountBadge');
   const syncNowBtn = document.getElementById('syncNowBtn');
   const syncStatus = document.getElementById('syncStatus');
   const lastSyncTime = document.getElementById('lastSyncTime');
 
   // Creator Safety & Preferences
-  const toggleWhitelistVerified = document.getElementById('toggleWhitelistVerified');
-  const toggleSynthetic = document.getElementById('toggleSynthetic');
   const toggleShorts = document.getElementById('toggleShorts');
   const togglePlaceholder = document.getElementById('togglePlaceholder');
 
   // Lists
-  const keywordCloud = document.getElementById('keywordCloud');
-  const newKeywordInput = document.getElementById('newKeywordInput');
-  const addKeywordBtn = document.getElementById('addKeywordBtn');
-
   const channelList = document.getElementById('channelList');
   const newChannelInput = document.getElementById('newChannelInput');
   const addChannelBtn = document.getElementById('addChannelBtn');
@@ -41,22 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const addAllowedChannelBtn = document.getElementById('addAllowedChannelBtn');
 
   const resetDefaultsBtn = document.getElementById('resetDefaultsBtn');
-  const tabBtns = document.querySelectorAll('.tab-btn');
-  const tabPanes = document.querySelectorAll('.tab-pane');
-
   let currentSettings = {};
-
-  // Tab switching
-  tabBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      tabBtns.forEach(b => b.classList.remove('active'));
-      tabPanes.forEach(p => p.classList.remove('active'));
-
-      btn.classList.add('active');
-      const targetPane = document.getElementById(btn.dataset.tab);
-      if (targetPane) targetPane.classList.add('active');
-    });
-  });
 
   function init() {
     chrome.storage.sync.get(null, (data) => {
@@ -79,8 +58,6 @@ document.addEventListener('DOMContentLoaded', () => {
       toggleEngineThumbnails.checked = Boolean(currentSettings.engineThumbnails); // False by default!
 
       // Creator Safety & Preferences
-      toggleWhitelistVerified.checked = currentSettings.whitelistVerified !== false;
-      toggleSynthetic.checked = currentSettings.blockSyntheticDisclosures !== false;
       toggleShorts.checked = Boolean(currentSettings.blockShorts);
       togglePlaceholder.checked = Boolean(currentSettings.placeholderMode);
 
@@ -90,10 +67,10 @@ document.addEventListener('DOMContentLoaded', () => {
         totalCountEl.textContent = total.toLocaleString();
       });
 
-      // Community Blocklist Stats from local storage
+      // Training data stats from local storage
       chrome.storage.local.get(['remoteChannels', 'lastCommunitySync'], (localData) => {
-        const remoteCount = Array.isArray(localData?.remoteChannels) ? localData.remoteChannels.length : 46876;
-        communityCountBadge.textContent = `${remoteCount.toLocaleString()} Channels`;
+        const remoteCount = Array.isArray(localData?.remoteChannels) ? localData.remoteChannels.length : 0;
+        communityCountBadge.textContent = `${remoteCount.toLocaleString()} Examples`;
 
         if (localData?.lastCommunitySync) {
           const syncDate = new Date(localData.lastCommunitySync);
@@ -101,17 +78,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
 
-      // Keywords (ensure clean list without standalone 'ai')
-      let kws = currentSettings.customKeywords;
-      if (!Array.isArray(kws) || kws.length === 0) {
-         kws = [];
-         chrome.storage.sync.set({ customKeywords: [] });
-      } else if (kws.includes('ai')) {
-        kws = kws.filter(k => k.trim().toLowerCase() !== 'ai');
-        chrome.storage.sync.set({ customKeywords: kws });
-      }
-
-      renderKeywords(kws);
       renderChannels(currentSettings.blockedChannels || []);
       renderAllowedChannels(currentSettings.allowedChannels || []);
     });
@@ -170,14 +136,6 @@ document.addEventListener('DOMContentLoaded', () => {
     chrome.storage.sync.set({ engineThumbnails: toggleEngineThumbnails.checked });
   });
 
-  toggleWhitelistVerified.addEventListener('change', () => {
-    chrome.storage.sync.set({ whitelistVerified: toggleWhitelistVerified.checked });
-  });
-
-  toggleSynthetic.addEventListener('change', () => {
-    chrome.storage.sync.set({ blockSyntheticDisclosures: toggleSynthetic.checked });
-  });
-
   toggleShorts.addEventListener('change', () => {
     chrome.storage.sync.set({ blockShorts: toggleShorts.checked });
   });
@@ -186,13 +144,13 @@ document.addEventListener('DOMContentLoaded', () => {
     chrome.storage.sync.set({ placeholderMode: togglePlaceholder.checked });
   });
 
-    syncNowBtn.addEventListener('click', () => {
+  syncNowBtn.addEventListener('click', () => {
     syncStatus.textContent = 'Syncing from GitHub...';
-    chrome.runtime.sendMessage({ action: 'syncCommunity' }, (response) => {
+    chrome.runtime.sendMessage({ action: 'syncTrainingData' }, (response) => {
       if (response && response.success) {
         syncStatus.textContent = 'Connected & Synced';
         lastSyncTime.textContent = 'Just now';
-        communityCountBadge.textContent = `${(response.count || 46876).toLocaleString()} Channels`;
+        communityCountBadge.textContent = `${(response.count || 0).toLocaleString()} Examples`;
       } else {
         syncStatus.textContent = 'Ready (Default list active)';
       }
@@ -203,7 +161,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (exportReportsBtn) {
     exportReportsBtn.addEventListener('click', () => {
       chrome.storage.local.get(['reportedSlopQueue'], (data) => {
-        const queue = data.reportedSlopQueue || [];
+        const queue = Array.isArray(data.reportedSlopQueue) ? data.reportedSlopQueue : [];
         if (queue.length === 0) {
           alert('No queued reports yet. When you click "Report Slop" on any YouTube card, they will be saved here.');
           return;
@@ -213,68 +171,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `noslop-reported-channels-${new Date().toISOString().slice(0, 10)}.json`;
+        a.download = `noslop-reports-${new Date().toISOString().slice(0, 10)}.json`;
         a.click();
         URL.revokeObjectURL(url);
       });
     });
   }
-
-  function renderKeywords(keywords) {
-    keywordCloud.innerHTML = '';
-    if (!keywords || keywords.length === 0) {
-      keywordCloud.innerHTML = '<span class="empty-state">No keyword filters</span>';
-      return;
-    }
-
-    keywords.forEach((kw, index) => {
-      const chip = document.createElement('span');
-      chip.className = 'tag-chip';
-      chip.textContent = kw;
-
-      const delBtn = document.createElement('button');
-      delBtn.className = 'tag-delete-btn';
-      delBtn.type = 'button';
-      delBtn.title = `Remove "${kw}"`;
-      delBtn.innerHTML = `
-        <svg viewBox="0 0 24 24">
-          <line x1="18" y1="6" x2="6" y2="18"></line>
-          <line x1="6" y1="6" x2="18" y2="18"></line>
-        </svg>
-      `;
-
-      delBtn.addEventListener('click', () => {
-        keywords.splice(index, 1);
-        chrome.storage.sync.set({ customKeywords: keywords }, () => {
-          renderKeywords(keywords);
-        });
-      });
-
-      chip.appendChild(delBtn);
-      keywordCloud.appendChild(chip);
-    });
-  }
-
-  function addKeyword() {
-    const val = newKeywordInput.value.trim().toLowerCase();
-    if (!val) return;
-
-    chrome.storage.sync.get('customKeywords', (data) => {
-       const list = Array.isArray(data.customKeywords) ? data.customKeywords : [];
-      if (!list.includes(val)) {
-        list.push(val);
-        chrome.storage.sync.set({ customKeywords: list }, () => {
-          renderKeywords(list);
-          newKeywordInput.value = '';
-        });
-      }
-    });
-  }
-
-  addKeywordBtn.addEventListener('click', addKeyword);
-  newKeywordInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') addKeyword();
-  });
 
   function renderChannels(channels) {
     channelList.innerHTML = '';
@@ -397,15 +299,12 @@ document.addEventListener('DOMContentLoaded', () => {
         engineScoring: true,
         sensitivity: 'balanced',
         engineThumbnails: false,
-        whitelistVerified: true,
         engineCommunity: true,
         engineAudioScript: true,
-        blockSyntheticDisclosures: true,
         blockShorts: false,
         placeholderMode: false,
         blockedChannels: [],
-        allowedChannels: [],
-        customKeywords: []
+        allowedChannels: []
       }, () => {
         init();
       });

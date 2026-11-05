@@ -21,11 +21,10 @@ const metaAsus = {
   isShort: true,
   snippet: 'ASUS Expertbook P1 Intel Core 5 210H - Best laptops under ₹60,000 🔥 #Laptop',
   cardText: 'ASUS Expertbook P1 Intel Core 5 210H - Best laptops under ₹60,000 🔥 #Laptop Techy Imran',
-  hasAiInfoButton: false,
   badgeText: ''
 };
 
-const res = calculateScore(metaAsus, [], { sensitivityThreshold: 0.50, whitelistVerified: true });
+const res = calculateScore(metaAsus, { sensitivityThreshold: 0.50 });
 console.log('ASUS Short Evaluation:');
 console.log('  Score:', res.score);
 console.log('  isBlocked:', res.isBlocked);

@@ -277,16 +277,12 @@ async function runCDPTest() {
               engineScoring: true,
               engineCommunity: true,
               sensitivity: 'balanced',
-              blockKeywords: true,
-              blockSyntheticDisclosures: true,
-              whitelistVerified: true,
               placeholderMode: false,
-              customKeywords: []
             }),
             set: () => {}
           },
           local: {
-            get: (keys, cb) => cb({ remoteChannels: window.__testChannels, remoteVideos: [] }),
+            get: (keys, cb) => cb({ remoteChannels: window.__testChannels }),
             set: () => {}
           },
           onChanged: { addListener: (listener) => { window.__noslopSettingsChanged = listener; } }
@@ -308,7 +304,7 @@ async function runCDPTest() {
   // Initialize Community with full 46k channel blocklist
   await client.send('Runtime.evaluate', {
     expression: `
-      window.NoSlopCommunity.init([], window.__testChannels, []);
+       window.NoSlopCommunity.init([], window.__testChannels, []);
     `
   });
 
@@ -395,10 +391,12 @@ async function runCDPTest() {
   console.log(`   - Layout CPU Time:    ${((metrics.LayoutDuration || 0) * 1000).toFixed(2)} ms`);
   console.log(`   - Total Task CPU:     ${((metrics.TaskDuration || 0) * 1000).toFixed(2)} ms`);
 
-  console.log('\n🎯 2. DOM FILTERING & BLOCKING ACCURACY (80 Cards in Feed):');
+  const processedCount = domData.blockedCount + domData.cleanCount;
+  console.log('\n🎯 2. DOM FILTERING & BLOCKING ACCURACY (lazy viewport sample):');
   console.log(`   - Total Cards Loaded:  ${domData.totalCards}`);
-  console.log(`   - Total Slop Blocked:  ${domData.blockedCount} (Expected: ~50)`);
-  console.log(`   - Clean Cards Kept:    ${domData.cleanCount} (Expected: ~30)`);
+  console.log(`   - Cards Evaluated:     ${processedCount}`);
+  console.log(`   - Total Slop Blocked:  ${domData.blockedCount}`);
+  console.log(`   - Clean Cards Kept:    ${domData.cleanCount}`);
   console.log(`   - 1-Click Action Pills Injected: ${domData.actionPillsCount}`);
   console.log(`   - Settings re-evaluation / allowlist: ${settingsData.success ? 'PASSED ✅' : 'FAILED ❌'}`);
   if (!settingsData.success) throw new Error(`Settings assertion failed: ${JSON.stringify(settingsData)}`);
