@@ -102,6 +102,11 @@ Required to store user filter preferences (sensitivity, engine toggles, custom k
 Used solely to update the extension action toolbar badge with the live count of blocked AI videos on the user's active YouTube tab.
 ```
 
+#### `alarms`
+```
+Used to schedule the bundled community blocklist refresh every 6 hours without running a persistent background polling loop.
+```
+
 #### Host Permissions: `*://*.youtube.com/*`
 ```
 Required to run content scripts on YouTube pages to inspect video metadata (titles, channel names, and native YouTube 'Altered or synthetic' disclosure badges) and remove detected AI slop elements from the DOM.

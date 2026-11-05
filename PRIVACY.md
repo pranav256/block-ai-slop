@@ -32,6 +32,7 @@ Under Google Chrome Web Store Developer Policies, NoSlop requests only the minim
 | :--- | :--- |
 | `storage` & `unlimitedStorage` | Used strictly to store your filter toggles, sensitivity threshold, custom keywords, and the offline community blocklist locally on your device. |
 | `tabs` | Used solely to update the extension action badge with the count of blocked videos on the current active YouTube tab. |
+| `alarms` | Used to schedule the background community blocklist refresh every 6 hours without keeping a polling loop alive. |
 | Host: `*://*.youtube.com/*` | Required to run content scripts on YouTube pages to detect and hide AI video elements. |
 | Host: `*://*.ytimg.com/*` & `*://*.ggpht.com/*` | Required solely to fetch thumbnail images in-memory via HTML5 Canvas if the user explicitly enables the experimental visual texture engine. |
 

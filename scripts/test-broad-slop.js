@@ -98,7 +98,7 @@ function buildKeywordRegex(kw) {
   const clean = kw.trim();
   const escaped = clean.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   if (escaped.startsWith('#')) return new RegExp('(?:^|[^\\w])' + escaped + '(?=[^\\w]|$)', 'iu');
-  return new RegExp('\\b' + escaped.replace(/\\s+/g, '[\\s_-]+') + '\\b', 'iu');
+  return new RegExp('\\b' + escaped.replace(/\s+/g, '[\\s_-]+') + '\\b', 'iu');
 }
 
 const compiledKeywords = DEFAULT_KEYWORDS.map(buildKeywordRegex).filter(Boolean);

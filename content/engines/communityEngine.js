@@ -79,14 +79,72 @@
   ]);
 
   let userBlockedChannels = new Set();
-  let remoteHandles = new Set();
-  let remoteChannelIds = new Set();
-  let remoteNames = new Set();
+  let allowedChannels = new Set();
+  let remoteHandles;
+  let remoteChannelIds;
+  let remoteNames;
   let remoteBlockedVideos = new Set();
   let totalRemoteCount = 0;
 
+  function hashString(value) {
+    let hash = 2166136261;
+    for (let i = 0; i < value.length; i++) {
+      hash ^= value.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return hash >>> 0;
+  }
+
+  // Exact lookup with one canonical string per entry and a compact 32-bit
+  // hash index. Hash collisions are always resolved by string comparison, so
+  // this remains an exact index rather than a probabilistic filter.
+  class CompactExactIndex {
+    constructor(values = []) {
+      const unique = Array.from(new Set(values.filter(Boolean)));
+      unique.sort();
+      const entries = unique
+        .map(value => ({ value, hash: hashString(value) }))
+        .sort((a, b) => a.hash - b.hash || a.value.localeCompare(b.value));
+
+      this.hashes = new Uint32Array(entries.length);
+      this.values = new Array(entries.length);
+      for (let i = 0; i < entries.length; i++) {
+        this.hashes[i] = entries[i].hash;
+        this.values[i] = entries[i].value;
+      }
+    }
+
+    has(value) {
+      if (!value || this.hashes.length === 0) return false;
+      const hash = hashString(value);
+      let low = 0;
+      let high = this.hashes.length;
+      while (low < high) {
+        const middle = (low + high) >>> 1;
+        if (this.hashes[middle] < hash) low = middle + 1;
+        else high = middle;
+      }
+
+      for (let i = low; i < this.hashes.length && this.hashes[i] === hash; i++) {
+        if (this.values[i] === value) return true;
+      }
+      return false;
+    }
+
+    get size() {
+      return this.values.length;
+    }
+  }
+
+  remoteHandles = new CompactExactIndex();
+  remoteChannelIds = new CompactExactIndex();
+  remoteNames = new CompactExactIndex();
+
   function normalize(str) {
-    if (!str) return '';
+    if (typeof str !== 'string' || !str) return '';
+    if (window.NoSlopText?.normalizeChannel) {
+      return window.NoSlopText.normalizeChannel(str);
+    }
     return str.toLowerCase()
       .replace(/[аàáâãäå]/g, 'a')
       .replace(/[еéèêë]/g, 'e')
@@ -100,46 +158,75 @@
       .trim();
   }
 
-  function initCommunityEngine(userList = [], remoteChannels = [], remoteVideos = []) {
-    userBlockedChannels = new Set((userList || []).map(normalize));
-    remoteBlockedVideos = new Set(remoteVideos || []);
+  function initCommunityEngine(userList = [], remoteChannels = [], remoteVideos = [], allowedList = []) {
+    userBlockedChannels = new Set(
+      (Array.isArray(userList) ? userList : [])
+        .filter(item => typeof item === 'string')
+        .map(normalize)
+        .filter(Boolean)
+    );
+    allowedChannels = new Set(
+      (Array.isArray(allowedList) ? allowedList : [])
+        .filter(item => typeof item === 'string')
+        .map(normalize)
+        .filter(Boolean)
+    );
+    remoteBlockedVideos = new Set(
+      (Array.isArray(remoteVideos) ? remoteVideos : []).filter(item => typeof item === 'string')
+    );
 
-    remoteHandles = new Set();
-    remoteChannelIds = new Set();
-    remoteNames = new Set();
-    totalRemoteCount = (remoteChannels || []).length;
+    const handles = [];
+    const channelIds = [];
+    const names = [];
+    totalRemoteCount = Array.isArray(remoteChannels) ? remoteChannels.length : 0;
 
-    for (const item of (remoteChannels || [])) {
-      if (!item) continue;
+    for (const item of (Array.isArray(remoteChannels) ? remoteChannels : [])) {
+      if (typeof item !== 'string' || !item.trim()) continue;
       const str = item.trim();
 
       // Channel URL format (/channel/UC...)
       if (str.startsWith('/channel/')) {
         const id = str.replace('/channel/', '').split('/')[0].split('?')[0];
-        remoteChannelIds.add(id);
-        remoteChannelIds.add(id.toLowerCase());
+        channelIds.push(id.toLowerCase());
         continue;
       }
 
       // Handle format (/@handle or @handle)
       if (str.startsWith('/@') || str.startsWith('@')) {
         const handle = str.replace(/^\/?@/, '').toLowerCase().split('/')[0].split('?')[0];
-        remoteHandles.add(handle);
-        remoteHandles.add('@' + handle);
+        handles.push(normalize(handle));
         continue;
       }
 
       // Raw YouTube Channel ID (UC...)
       if (/^UC[a-zA-Z0-9_-]{20,}$/.test(str)) {
-        remoteChannelIds.add(str);
-        remoteChannelIds.add(str.toLowerCase());
+        channelIds.push(str.toLowerCase());
         continue;
       }
 
       // Channel Name
-      remoteNames.add(str.toLowerCase());
-      remoteNames.add(normalize(str));
+      names.push(normalize(str));
     }
+
+    remoteHandles = new CompactExactIndex(handles);
+    remoteChannelIds = new CompactExactIndex(channelIds);
+    remoteNames = new CompactExactIndex(names);
+    window.NoSlopSemantic?.initialize?.(remoteChannels, allowedList);
+  }
+
+  function isChannelAllowed(channelName, channelHref = '') {
+    const rawName = (channelName || '').toLowerCase().trim();
+    const normName = normalize(channelName);
+
+    if (allowedChannels.has(rawName) || allowedChannels.has(normName)) return true;
+    if (channelHref) {
+      const cleanHref = channelHref.split('?')[0].replace(/\/+$/, '');
+      const handleMatch = cleanHref.match(/\/@([^\/]+)/);
+      if (handleMatch && allowedChannels.has(normalize(handleMatch[1]))) return true;
+      const idMatch = cleanHref.match(/\/channel\/([^\/]+)/);
+      if (idMatch && allowedChannels.has(normalize(idMatch[1]))) return true;
+    }
+    return false;
   }
 
   function isChannelBlocked(channelName, channelHref = '') {
@@ -157,7 +244,7 @@
     }
 
     // 3. Check community channel names
-    if (remoteNames.has(rawName) || remoteNames.has(normName)) {
+    if (remoteNames.has(normName)) {
       return { blocked: true, source: 'Community Blocklist Name' };
     }
 
@@ -169,10 +256,10 @@
       const handleMatch = cleanHref.match(/\/@([^\/]+)/);
       if (handleMatch) {
         const handle = handleMatch[1].toLowerCase();
-        if (remoteHandles.has(handle) || remoteHandles.has('@' + handle)) {
+        if (remoteHandles.has(normalize(handle))) {
           return { blocked: true, source: `Community Blocklist Handle (@${handle})` };
         }
-        if (userBlockedChannels.has(handle) || userBlockedChannels.has('@' + handle)) {
+        if (userBlockedChannels.has(normalize(handle))) {
           return { blocked: true, source: `User Blacklist (@${handle})` };
         }
       }
@@ -181,7 +268,7 @@
       const idMatch = cleanHref.match(/\/channel\/([^\/]+)/);
       if (idMatch) {
         const id = idMatch[1];
-        if (remoteChannelIds.has(id) || remoteChannelIds.has(id.toLowerCase())) {
+        if (remoteChannelIds.has(id.toLowerCase())) {
           return { blocked: true, source: `Community Blocklist ID (${id})` };
         }
       }
@@ -204,11 +291,17 @@
 
   window.NoSlopCommunity = {
     init: initCommunityEngine,
+    isChannelAllowed,
     isChannelBlocked,
     isVideoBlocked,
     normalize,
     getCuratedCount: () => SEEDED_DRAMA_MILLS.size,
     getUserCount: () => userBlockedChannels.size,
-    getRemoteCount: () => totalRemoteCount
+    getRemoteCount: () => totalRemoteCount,
+    getIndexStats: () => ({
+      handles: remoteHandles?.size || 0,
+      channelIds: remoteChannelIds?.size || 0,
+      names: remoteNames?.size || 0
+    })
   };
 })();

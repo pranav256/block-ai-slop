@@ -1,102 +1,59 @@
 /**
- * NoSlop - Engine 4: Script Perplexity & Audio TTS Cadence Analyzer
- * Detects LLM-generated script n-grams and unvarying robotic voiceover cadence on watch pages.
+ * NoSlop - Generic script/style analyzer.
+ *
+ * No phrase dictionary is used. The analyzer measures repetition, lexical
+ * diversity, sentence rhythm, and punctuation regularity. Audio capture is
+ * intentionally not attached to feed cards: MediaElementSource can interfere
+ * with YouTube playback and cannot provide reliable provenance by itself.
  */
 
 (() => {
   'use strict';
 
-  // Common LLM-generated script vocabulary & robotic transitional n-grams
-  const LLM_SCRIPT_CLICHES = [
-    /\b(in a world where|little did (he|she) know|testament to|delve into|tapestry of|let that sink in|buckle up|without further ado)\b/gi,
-    /\b(unravel the (secrets|truth|mystery)|take a closer look|stand the test of time|at the end of the day)\b/gi,
-    /\b(have you ever wondered|what if i told you|it is worth noting that|needless to say)\b/gi,
-    /\b(complies with edsa standards|not a real-life scenario|fictional drama scenario)\b/gi
-  ];
-
-  function analyzeScriptPerplexity(text) {
-    if (!text || text.length < 50) return { score: 0, reason: null };
-
-    let hits = 0;
-    const matchedPhrases = [];
-
-    for (const regex of LLM_SCRIPT_CLICHES) {
-      const matches = text.match(regex);
-      if (matches) {
-        hits += matches.length;
-        matchedPhrases.push(...matches.slice(0, 2));
-      }
-    }
-
-    if (hits >= 2) {
-      return {
-        score: Math.min(0.70, 0.35 + hits * 0.15),
-        reason: `LLM Script Patterns detected: "${matchedPhrases.slice(0, 2).join('", "')}"`
-      };
-    }
-
-    return { score: 0, reason: null };
+  function normalize(text) {
+    if (window.NoSlopText?.compactText) return window.NoSlopText.compactText(text);
+    return String(text || '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
   }
 
-  // Web Audio Cadence Monitor (optional hook for video playback)
-  let audioCtx = null;
-  let audioSource = null;
-  let analyser = null;
+  function analyzeScriptPerplexity(text) {
+    const normalized = normalize(text);
+    if (normalized.length < 80) return { score: 0, reason: null, evidence: {} };
 
-  function monitorAudioCadence(videoElement, onTtsDetected) {
-    if (!videoElement || audioCtx) return;
-
-    try {
-      const AudioContext = window.AudioContext || window.webkitAudioContext;
-      if (!AudioContext) return;
-
-      audioCtx = new AudioContext();
-      analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 512;
-
-      audioSource = audioCtx.createMediaElementSource(videoElement);
-      audioSource.connect(analyser);
-      analyser.connect(audioCtx.destination);
-
-      const bufferLength = analyser.frequencyBinCount;
-      const dataArray = new Uint8Array(bufferLength);
-      let shortPauseCount = 0;
-      let checkCycles = 0;
-
-      const cadenceInterval = setInterval(() => {
-        if (videoElement.paused || videoElement.ended) return;
-
-        analyser.getByteFrequencyData(dataArray);
-        let sum = 0;
-        for (let i = 0; i < bufferLength; i++) sum += dataArray[i];
-        const average = sum / bufferLength;
-
-        // Measure micro-pauses typical of TTS (short unvarying 50-100ms gaps vs human breath drops)
-        if (average < 5) {
-          shortPauseCount++;
-        }
-
-        checkCycles++;
-        if (checkCycles >= 60) { // ~30 seconds of playback
-          // If rapid robotic narration with abnormally mechanical pause distribution
-          if (shortPauseCount > 15) {
-            onTtsDetected?.({
-              score: 0.50,
-              reason: 'TTS Speech Cadence Detected (Consistent mechanical rhythm & flat acoustic variance)'
-            });
-            clearInterval(cadenceInterval);
-          }
-          checkCycles = 0;
-          shortPauseCount = 0;
-        }
-      }, 500);
-    } catch {
-      // Audio capture may be restricted by media CORS policy
+    const tokens = normalized.split(' ').filter(Boolean);
+    const unique = new Set(tokens).size;
+    const lexicalDiversity = unique / Math.max(1, tokens.length);
+    const trigrams = new Map();
+    for (let i = 0; i < tokens.length - 2; i++) {
+      const gram = tokens.slice(i, i + 3).join(' ');
+      trigrams.set(gram, (trigrams.get(gram) || 0) + 1);
     }
+    const repeatedTrigrams = Array.from(trigrams.values()).filter(count => count > 1).length;
+    const repetition = repeatedTrigrams / Math.max(1, trigrams.size);
+    const sentences = normalized.split(/[.!?]+/).map(sentence => sentence.trim()).filter(Boolean);
+    const sentenceLengths = sentences.map(sentence => sentence.split(' ').length);
+    const mean = sentenceLengths.length
+      ? sentenceLengths.reduce((sum, value) => sum + value, 0) / sentenceLengths.length
+      : 0;
+    const variance = sentenceLengths.length
+      ? sentenceLengths.reduce((sum, value) => sum + (value - mean) ** 2, 0) / sentenceLengths.length
+      : 0;
+    const rhythmRegularity = mean ? Math.max(0, 1 - Math.sqrt(variance) / mean) : 0;
+    const score = Math.min(0.70,
+      Math.max(0, 1 - lexicalDiversity) * 0.35 +
+      repetition * 0.35 +
+      rhythmRegularity * 0.20 +
+      Math.min(1, normalized.length / 2000) * 0.10
+    );
+
+    return {
+      score: Number(score.toFixed(3)),
+      reason: score >= 0.50 ? 'Repetitive script structure' : null,
+      evidence: { lexicalDiversity, repetition, rhythmRegularity, sentenceCount: sentences.length }
+    };
   }
 
   window.NoSlopAudioScript = {
     analyzeScript: analyzeScriptPerplexity,
-    monitorAudio: () => {} // Safe no-op, zero playback interference
+    monitorAudio: () => {}
   };
 })();

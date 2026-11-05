@@ -6,7 +6,8 @@
   "permissions": [
     "storage",
     "unlimitedStorage",
-    "tabs"
+    "tabs",
+    "alarms"
   ],
   "host_permissions": [
     "*://*.youtube.com/*",
@@ -30,6 +31,8 @@
         "*://*.youtube.com/*"
       ],
       "js": [
+        "content/engines/textNormalization.js",
+        "content/engines/semanticEngine.js",
         "content/engines/communityEngine.js",
         "content/engines/scoringEngine.js",
         "content/engines/thumbnailEngine.js",

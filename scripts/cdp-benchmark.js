@@ -246,6 +246,8 @@ async function runCDPTest() {
 
   console.log('💉 Injecting NoSlop engines, content script & CSS into live Chromium DOM...');
 
+  const normalizationCode = fs.readFileSync('content/engines/textNormalization.js', 'utf8');
+  const semanticCode = fs.readFileSync('content/engines/semanticEngine.js', 'utf8');
   const communityCode = fs.readFileSync('content/engines/communityEngine.js', 'utf8');
   const scoringCode = fs.readFileSync('content/engines/scoringEngine.js', 'utf8');
   const contentCode = fs.readFileSync('content/content.js', 'utf8');
@@ -287,7 +289,7 @@ async function runCDPTest() {
             get: (keys, cb) => cb({ remoteChannels: window.__testChannels, remoteVideos: [] }),
             set: () => {}
           },
-          onChanged: { addListener: () => {} }
+          onChanged: { addListener: (listener) => { window.__noslopSettingsChanged = listener; } }
         },
         runtime: {
           sendMessage: () => {},
@@ -297,7 +299,9 @@ async function runCDPTest() {
     `
   });
 
-  // Inject Community Engine & Scoring Engine
+  // Inject the same engine order used by manifest.json.
+  await client.send('Runtime.evaluate', { expression: normalizationCode });
+  await client.send('Runtime.evaluate', { expression: semanticCode });
   await client.send('Runtime.evaluate', { expression: communityCode });
   await client.send('Runtime.evaluate', { expression: scoringCode });
 
@@ -355,6 +359,29 @@ async function runCDPTest() {
 
   const domData = evalDom.result.value;
 
+  const settingsResult = await client.send('Runtime.evaluate', {
+    expression: `
+      (async () => {
+        const drama = [...document.querySelectorAll('ytd-video-renderer')]
+          .find(card => card.textContent.includes('Drama Diary'));
+        if (!drama || !window.__noslopSettingsChanged) return { success: false, reason: 'test hook unavailable' };
+        window.__noslopSettingsChanged({ enabled: { oldValue: true, newValue: false } }, 'sync');
+        await new Promise(resolve => setTimeout(resolve, 120));
+        const disabledVisible = drama.dataset.noslopStatus !== 'blocked' && getComputedStyle(drama).display !== 'none';
+        window.__noslopSettingsChanged({
+          enabled: { oldValue: false, newValue: true },
+          allowedChannels: { oldValue: [], newValue: ['Drama Diary'] }
+        }, 'sync');
+        await new Promise(resolve => setTimeout(resolve, 180));
+        const allowlisted = drama.dataset.noslopStatus !== 'blocked' && getComputedStyle(drama).display !== 'none';
+        return { success: disabledVisible && allowlisted, disabledVisible, allowlisted };
+      })()
+    `,
+    awaitPromise: true,
+    returnByValue: true
+  });
+  const settingsData = settingsResult.result.value;
+
   console.log('\n' + '='.repeat(65));
   console.log('  LIVE CHROMIUM DEVTOOLS PROTOCOL TEST RESULTS');
   console.log('='.repeat(65));
@@ -373,6 +400,8 @@ async function runCDPTest() {
   console.log(`   - Total Slop Blocked:  ${domData.blockedCount} (Expected: ~50)`);
   console.log(`   - Clean Cards Kept:    ${domData.cleanCount} (Expected: ~30)`);
   console.log(`   - 1-Click Action Pills Injected: ${domData.actionPillsCount}`);
+  console.log(`   - Settings re-evaluation / allowlist: ${settingsData.success ? 'PASSED ✅' : 'FAILED ❌'}`);
+  if (!settingsData.success) throw new Error(`Settings assertion failed: ${JSON.stringify(settingsData)}`);
 
   console.log('\n📋 3. FIRST 8 SAMPLE CARDS (Exact Match Verification):');
   domData.sample.forEach((s, idx) => {

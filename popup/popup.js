@@ -36,75 +36,15 @@ document.addEventListener('DOMContentLoaded', () => {
   const channelList = document.getElementById('channelList');
   const newChannelInput = document.getElementById('newChannelInput');
   const addChannelBtn = document.getElementById('addChannelBtn');
+  const allowedChannelList = document.getElementById('allowedChannelList');
+  const newAllowedChannelInput = document.getElementById('newAllowedChannelInput');
+  const addAllowedChannelBtn = document.getElementById('addAllowedChannelBtn');
 
   const resetDefaultsBtn = document.getElementById('resetDefaultsBtn');
   const tabBtns = document.querySelectorAll('.tab-btn');
   const tabPanes = document.querySelectorAll('.tab-pane');
 
   let currentSettings = {};
-
-  const DEFAULT_KEYWORDS = [
-    "ai generated",
-    "ai-generated",
-    "ai drama",
-    "ai-drama",
-    "ai dub",
-    "ai dubbed",
-    "ai romance",
-    "ai series",
-    "ai recap",
-    "ai video",
-    "ai animation",
-    "ai animated",
-    "ai film",
-    "ai movie",
-    "ai story",
-    "ai stories",
-    "ai voice",
-    "ai cover",
-    "ai song",
-    "ai slop",
-    "made with ai",
-    "created with ai",
-    "sora",
-    "kling",
-    "runway gen",
-    "runwayml",
-    "elevenlabs",
-    "luma dream machine",
-    "pika labs",
-    "flux.1",
-    "flux ai",
-    "haiper",
-    "stable diffusion",
-    "stablediffusion",
-    "deepfake",
-    "synthesia",
-    "heygen",
-    "minimax",
-    "hailuo",
-    "suno ai",
-    "udio ai",
-    "minidrama",
-    "mini drama",
-    "short drama",
-    "ai philosophy",
-    "ai stoic",
-    "ai stoicism",
-    "ai quotes",
-    "ai motivation",
-    "ai psychology",
-    "dark psychology ai",
-    "faceless channel",
-    "chatgpt stories",
-    "reddit ai",
-    "ai facts",
-    "cloned voice",
-    "deepfake voice",
-    "ai voice cover",
-    "text to speech",
-    "text-to-speech"
-  ];
 
   // Tab switching
   tabBtns.forEach(btn => {
@@ -164,8 +104,8 @@ document.addEventListener('DOMContentLoaded', () => {
       // Keywords (ensure clean list without standalone 'ai')
       let kws = currentSettings.customKeywords;
       if (!Array.isArray(kws) || kws.length === 0) {
-        kws = DEFAULT_KEYWORDS;
-        chrome.storage.sync.set({ customKeywords: DEFAULT_KEYWORDS });
+         kws = [];
+         chrome.storage.sync.set({ customKeywords: [] });
       } else if (kws.includes('ai')) {
         kws = kws.filter(k => k.trim().toLowerCase() !== 'ai');
         chrome.storage.sync.set({ customKeywords: kws });
@@ -173,6 +113,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       renderKeywords(kws);
       renderChannels(currentSettings.blockedChannels || []);
+      renderAllowedChannels(currentSettings.allowedChannels || []);
     });
 
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -319,7 +260,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!val) return;
 
     chrome.storage.sync.get('customKeywords', (data) => {
-      const list = data.customKeywords || [...DEFAULT_KEYWORDS];
+       const list = Array.isArray(data.customKeywords) ? data.customKeywords : [];
       if (!list.includes(val)) {
         list.push(val);
         chrome.storage.sync.set({ customKeywords: list }, () => {
@@ -373,6 +314,41 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  function renderAllowedChannels(channels) {
+    allowedChannelList.innerHTML = '';
+    if (!channels || channels.length === 0) {
+      allowedChannelList.innerHTML = '<span class="empty-state">No allowlisted channels.</span>';
+      return;
+    }
+
+    channels.forEach((channel, index) => {
+      const item = document.createElement('div');
+      item.className = 'channel-item';
+
+      const label = document.createElement('span');
+      label.textContent = channel;
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'channel-delete-btn';
+      delBtn.type = 'button';
+      delBtn.title = `Remove allowlist entry "${channel}"`;
+      delBtn.innerHTML = `
+        <svg viewBox="0 0 24 24">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      `;
+
+      delBtn.addEventListener('click', () => {
+        const next = channels.filter((_, itemIndex) => itemIndex !== index);
+        chrome.storage.sync.set({ allowedChannels: next }, () => renderAllowedChannels(next));
+      });
+
+      item.append(label, delBtn);
+      allowedChannelList.appendChild(item);
+    });
+  }
+
   function addChannel() {
     const val = newChannelInput.value.trim();
     if (!val) return;
@@ -389,9 +365,29 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  function addAllowedChannel() {
+    const val = newAllowedChannelInput.value.trim();
+    if (!val) return;
+
+    chrome.storage.sync.get('allowedChannels', (data) => {
+      const list = Array.isArray(data.allowedChannels) ? data.allowedChannels : [];
+      if (!list.some(item => item.toLowerCase() === val.toLowerCase())) {
+        list.push(val);
+        chrome.storage.sync.set({ allowedChannels: list }, () => {
+          renderAllowedChannels(list);
+          newAllowedChannelInput.value = '';
+        });
+      }
+    });
+  }
+
   addChannelBtn.addEventListener('click', addChannel);
   newChannelInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') addChannel();
+  });
+  addAllowedChannelBtn.addEventListener('click', addAllowedChannel);
+  newAllowedChannelInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') addAllowedChannel();
   });
 
   resetDefaultsBtn.addEventListener('click', () => {
@@ -405,9 +401,11 @@ document.addEventListener('DOMContentLoaded', () => {
         engineCommunity: true,
         engineAudioScript: true,
         blockSyntheticDisclosures: true,
-        blockShorts: true,
+        blockShorts: false,
         placeholderMode: false,
-        customKeywords: [...DEFAULT_KEYWORDS]
+        blockedChannels: [],
+        allowedChannels: [],
+        customKeywords: []
       }, () => {
         init();
       });

@@ -10,6 +10,12 @@ ytd-rich-item-renderer[data-noslop-status="blocked"]:not([data-noslop-status="re
 ytd-video-renderer[data-noslop-status="blocked"]:not([data-noslop-status="revealed"]):not(.noslop-revealed),
 ytd-compact-video-renderer[data-noslop-status="blocked"]:not([data-noslop-status="revealed"]):not(.noslop-revealed),
 ytd-grid-video-renderer[data-noslop-status="blocked"]:not([data-noslop-status="revealed"]):not(.noslop-revealed),
+ytd-playlist-renderer[data-noslop-status="blocked"]:not([data-noslop-status="revealed"]):not(.noslop-revealed),
+ytd-shelf-renderer[data-noslop-status="blocked"]:not([data-noslop-status="revealed"]):not(.noslop-revealed),
+ytd-reel-shelf-renderer[data-noslop-status="blocked"]:not([data-noslop-status="revealed"]):not(.noslop-revealed),
+ytd-radio-renderer[data-noslop-status="blocked"]:not([data-noslop-status="revealed"]):not(.noslop-revealed),
+ytd-movie-renderer[data-noslop-status="blocked"]:not([data-noslop-status="revealed"]):not(.noslop-revealed),
+ytd-channel-renderer[data-noslop-status="blocked"]:not([data-noslop-status="revealed"]):not(.noslop-revealed),
 ytd-reel-item-renderer[data-noslop-status="blocked"]:not([data-noslop-status="revealed"]):not(.noslop-revealed),
 yt-lockup-view-model[data-noslop-status="blocked"]:not([data-noslop-status="revealed"]):not(.noslop-revealed) {
   display: none !important;
@@ -31,6 +37,12 @@ ytd-rich-item-renderer[data-noslop-status="revealed"],
 ytd-video-renderer[data-noslop-status="revealed"],
 ytd-compact-video-renderer[data-noslop-status="revealed"],
 ytd-grid-video-renderer[data-noslop-status="revealed"],
+ytd-playlist-renderer[data-noslop-status="revealed"],
+ytd-shelf-renderer[data-noslop-status="revealed"],
+ytd-reel-shelf-renderer[data-noslop-status="revealed"],
+ytd-radio-renderer[data-noslop-status="revealed"],
+ytd-movie-renderer[data-noslop-status="revealed"],
+ytd-channel-renderer[data-noslop-status="revealed"],
 ytd-reel-item-renderer[data-noslop-status="revealed"],
 yt-lockup-view-model[data-noslop-status="revealed"] {
   display: block !important;

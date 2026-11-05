@@ -504,6 +504,21 @@ input[type="text"]::placeholder {
   overflow-y: auto;
 }
 
+.list-subsection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-hairline);
+}
+
+.list-subsection-header {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
 .channel-item {
   display: flex;
   align-items: center;

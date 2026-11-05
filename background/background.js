@@ -5,70 +5,10 @@
  */
 
 const GITHUB_REMOTE_BLOCKLIST_URL = 'https://raw.githubusercontent.com/pranav256/block-ai-slop/main/community-blocklist.json';
-
-// Only compound generative phrases — never match standalone 'ai' as a topic!
-const DEFAULT_KEYWORDS = [
-  "ai generated",
-  "ai-generated",
-  "ai drama",
-  "ai-drama",
-  "ai dub",
-  "ai dubbed",
-  "ai romance",
-  "ai series",
-  "ai recap",
-  "ai video",
-  "ai animation",
-  "ai animated",
-  "ai film",
-  "ai movie",
-  "ai story",
-  "ai stories",
-  "ai voice",
-  "ai cover",
-  "ai song",
-  "ai slop",
-  "made with ai",
-  "created with ai",
-  "sora",
-  "kling",
-  "runway gen",
-  "runwayml",
-  "elevenlabs",
-  "luma dream machine",
-  "pika labs",
-  "flux.1",
-  "flux ai",
-  "haiper",
-  "stable diffusion",
-  "stablediffusion",
-  "deepfake",
-  "synthesia",
-  "heygen",
-  "minimax",
-  "hailuo",
-  "suno ai",
-  "udio ai",
-  "minidrama",
-  "mini drama",
-  "short drama",
-  "ai philosophy",
-  "ai stoic",
-  "ai stoicism",
-  "ai quotes",
-  "ai motivation",
-  "ai psychology",
-  "dark psychology ai",
-  "faceless channel",
-  "chatgpt stories",
-  "reddit ai",
-  "ai facts",
-  "cloned voice",
-  "deepfake voice",
-  "ai voice cover",
-  "text to speech",
-  "text-to-speech"
-];
+const COMMUNITY_SYNC_ALARM = 'noslop-community-sync';
+const MAX_REMOTE_CHANNELS = 500000;
+const MAX_REMOTE_ENTRY_LENGTH = 300;
+const VERSION_RE = /^\d+\.\d+\.\d+$/;
 
 const DEFAULT_SETTINGS = {
   enabled: true,
@@ -82,8 +22,9 @@ const DEFAULT_SETTINGS = {
   blockKeywords: true,
   blockShorts: false,         // FALSE by default: only AI slop shorts are blocked, human shorts stay
   placeholderMode: false,     // Clean AdBlock style (default)
-  customKeywords: DEFAULT_KEYWORDS,
+  customKeywords: [],
   blockedChannels: [],
+  allowedChannels: [],
   stats: {
     totalBlocked: 0
   }
@@ -95,12 +36,13 @@ async function ensureLocalBlocklist() {
     if (!localData.remoteChannels || localData.remoteChannels.length === 0) {
       const res = await fetch(chrome.runtime.getURL('community-blocklist.json'));
       if (res.ok) {
-        const json = await res.json();
-        if (json && Array.isArray(json.channels)) {
+        const json = validateBlocklist(await res.json());
+        if (json) {
           await chrome.storage.local.set({
             remoteChannels: json.channels,
             remoteVideos: json.videoIds || [],
-            lastCommunitySync: json.updatedAt || new Date().toISOString()
+            communityVersion: json.version,
+            lastCommunitySync: json.updatedAt
           });
           console.log(`[NoSlop Background] Loaded ${json.channels.length} bundled community channels into local storage.`);
         }
@@ -109,6 +51,38 @@ async function ensureLocalBlocklist() {
   } catch (err) {
     console.warn('[NoSlop Background] Bundled blocklist load error:', err.message);
   }
+}
+
+function validateBlocklist(data) {
+  if (!data || !VERSION_RE.test(data.version || '') ||
+      !Array.isArray(data.channels) || data.channels.length > MAX_REMOTE_CHANNELS) {
+    return null;
+  }
+
+  const channels = Array.from(new Set(data.channels.filter(item =>
+    typeof item === 'string' && item.trim() && item.length <= MAX_REMOTE_ENTRY_LENGTH
+  ).map(item => item.trim())));
+  const videoIds = Array.from(new Set((Array.isArray(data.videoIds) ? data.videoIds : []).filter(item =>
+    typeof item === 'string' && /^[A-Za-z0-9_-]{6,32}$/.test(item)
+  )));
+
+  const updatedAt = new Date(data.updatedAt);
+  if (channels.length === 0 || !Number.isFinite(updatedAt.getTime())) return null;
+  return {
+    channels,
+    videoIds,
+    version: data.version,
+    updatedAt: updatedAt.toISOString()
+  };
+}
+
+function compareVersions(left, right) {
+  const a = String(left || '0.0.0').split('.').map(Number);
+  const b = String(right || '0.0.0').split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    if (a[i] !== b[i]) return a[i] > b[i] ? 1 : -1;
+  }
+  return 0;
 }
 
 chrome.runtime.onInstalled.addListener(async () => {
@@ -120,16 +94,6 @@ chrome.runtime.onInstalled.addListener(async () => {
       toSet[key] = value;
     }
   }
-
-  // Ensure new default keywords are merged so existing installs automatically receive updates
-  const existingKws = Array.isArray(current.customKeywords) ? current.customKeywords : [];
-  const mergedKws = [...existingKws];
-  for (const defKw of DEFAULT_KEYWORDS) {
-    if (!mergedKws.some(k => k.trim().toLowerCase() === defKw.toLowerCase())) {
-      mergedKws.push(defKw);
-    }
-  }
-  toSet.customKeywords = mergedKws.filter(k => k.trim().toLowerCase() !== 'ai');
 
   // Fix shorts: do not blanket-block shorts unless user deliberately enabled it
   if (current.blockShorts === undefined) {
@@ -143,14 +107,27 @@ chrome.runtime.onInstalled.addListener(async () => {
   chrome.action.setBadgeBackgroundColor({ color: '#f43f5e' });
 
   await ensureLocalBlocklist();
+  await scheduleCommunitySync();
   syncCommunityBlocklist();
 });
 
-chrome.runtime.onStartup.addListener(() => {
-  ensureLocalBlocklist();
+chrome.runtime.onStartup.addListener(async () => {
+  await ensureLocalBlocklist();
+  await scheduleCommunitySync();
 });
 
-setInterval(syncCommunityBlocklist, 6 * 60 * 60 * 1000);
+async function scheduleCommunitySync() {
+  await chrome.alarms.create(COMMUNITY_SYNC_ALARM, {
+    delayInMinutes: 1,
+    periodInMinutes: 6 * 60
+  });
+}
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === COMMUNITY_SYNC_ALARM) {
+    syncCommunityBlocklist();
+  }
+});
 
 async function syncCommunityBlocklist() {
   try {
@@ -161,16 +138,19 @@ async function syncCommunityBlocklist() {
       return { success: false, status: res.status };
     }
 
-    const data = await res.json();
-    if (data && Array.isArray(data.channels)) {
+    const data = validateBlocklist(await res.json());
+    const stored = await chrome.storage.local.get(['communityVersion']);
+    if (data && (!stored.communityVersion || compareVersions(data.version, stored.communityVersion) >= 0)) {
       await chrome.storage.local.set({
         remoteChannels: data.channels,
         remoteVideos: data.videoIds || [],
-        lastCommunitySync: new Date().toISOString()
+        communityVersion: data.version,
+        lastCommunitySync: data.updatedAt
       });
       console.log(`[NoSlop Background] Synced ${data.channels.length} community blocked channels from GitHub.`);
       return { success: true, count: data.channels.length };
     }
+    if (data) return { success: false, status: 'stale', version: data.version };
   } catch (err) {
     console.warn('[NoSlop Background] Community blocklist sync failed, falling back to local:', err.message);
     await ensureLocalBlocklist();
@@ -241,6 +221,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     syncCommunityBlocklist().then((result) => {
       sendResponse(result);
     });
+    return true;
+  }
+
+  if (message.action === 'openReport') {
+    const channelName = String(message.channelName || '').slice(0, 160);
+    const channelHref = String(message.channelHref || '').slice(0, 500);
+    const videoTitle = String(message.videoTitle || '').slice(0, 240);
+    const videoId = String(message.videoId || '').slice(0, 32);
+    const videoUrl = videoId ? `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}` : '';
+    const title = encodeURIComponent(`[Slop Report]: ${channelName || videoTitle}`);
+    const body = encodeURIComponent([
+      `Channel: ${channelName}`,
+      `Channel URL / Handle: ${channelHref}`,
+      `Video title: ${videoTitle}`,
+      `Video URL: ${videoUrl}`
+    ].join('\n'));
+    chrome.tabs.create({
+      url: `https://github.com/pranav256/block-ai-slop/issues/new?template=report-slop.yml&title=${title}&body=${body}`
+    });
+    sendResponse({ success: true });
     return true;
   }
 });

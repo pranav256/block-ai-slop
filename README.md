@@ -26,6 +26,7 @@ NoSlop is engineered to eliminate **AI Slop** (automated story mills, synthetic 
 1. **No Thumbnail Blocking by Default**: Thumbnail visual analysis is disabled by default so human creators using Midjourney/DALL-E thumbnail art are never blocked.
 2. **Verified Channel Whitelist**: YouTube-verified creators (`StarTalk`, `DOAC`, `Veritasium`, etc.) are automatically protected from heuristic slop filters.
 3. **Compound Generative Keywords Only**: Standalone `"AI"` is never treated as a keyword — only explicit generative phrases (*"AI generated"*, *"AI animation"*, *"AI voiceover"*, *"text to video"*) are targeted.
+4. **User Allowlist**: Add a channel name or `@handle` under **Blocked channels → Always allow** to override heuristic and community matches for a creator you trust.
 
 ---
 
@@ -123,6 +124,7 @@ Encountered a new AI video or channel that slipped through? **Block it without a
   * **Off (Default / AdBlock Style)**: Videos completely vanish from the page (`display: none !important;`) with zero leftover whitespace.
   * **On**: Shows a minimal, collapsible hairline bar (*"AI video hidden — Click to view"*).
 * **Sync Now Button**: Manually forces an instant fetch of the latest community blocklist from GitHub.
+* **Allowlist**: Trusted channels can be exempted by name or handle from the popup's channel controls.
 
 ---
 
