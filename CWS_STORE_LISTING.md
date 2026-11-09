@@ -41,20 +41,21 @@ NoSlop is a privacy-first adblocker-style extension that scores YouTube feed, se
 Most naive filters block anything with the word "AI" or any video with an AI-generated thumbnail. That breaks real human science educators (like Neil deGrasse Tyson on StarTalk, Steven Bartlett on The Diary Of A CEO, or Veritasium) who discuss AI topics or use Midjourney art in thumbnails.
 
 NoSlop solves this with a multi-signal detection pipeline:
-• Algorithm-only automatic decisions: no hard-coded channel, keyword, hashtag, disclosure, or topic rules.
-• Local statistical features: hashed n-grams, lexical diversity, repetition, entropy, punctuation, and text overlap.
+• Local hybrid decisions: native synthetic disclosures, exact community matches, generation text/hashtags, and genre heuristics.
+• Trained text features: hashed n-grams and style statistics, with an evidence gate before contributing a score.
+• Verified-channel protection by default, except for native synthetic disclosures; personal allow/block choices take priority.
 • Human-First Defaults: Visual thumbnail scanning is disabled by default to protect creators using AI artwork.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⚡ 4-ENGINE DETECTION ARCHITECTURE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-1. Statistical Scoring Engine:
-   • Scores hashed text n-grams and language-neutral style features.
-   • Combines similarity, lexical diversity, repetition, entropy, punctuation, and text overlap.
+1. Hybrid Scoring Engine:
+   • Uses native synthetic disclosures, generation text/hashtags, and genre heuristics.
+   • Adds trained character similarity and style evidence when earlier signals do not already block.
 
-2. Optional Training Corpus:
-   • The bundled corpus trains the statistical model; it never directly blocks a channel, handle, or video.
-   • Training data can be refreshed from GitHub every 6 hours.
+2. Community Blocklist:
+   • Directly matches indexed channels and video IDs; a bounded sample also seeds the text model.
+   • Community data can be refreshed from GitHub every 6 hours.
 
 3. Script Statistics:
    • Measures generic repetition, lexical diversity, sentence rhythm, and punctuation regularity.
@@ -67,7 +68,7 @@ NoSlop solves this with a multi-signal detection pipeline:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 • Zero tracking, zero telemetry, zero analytics.
 • 100% in-memory local processing inside your browser sandbox.
-• No video URLs or browsing history are ever collected, transmitted, or sold.
+• No automatic browsing-history collection or upload. User-selected reports stay local and can open a pre-filled GitHub issue.
 • Fully open-source under the MIT license on GitHub: https://github.com/pranav256/block-ai-slop
 
 Take back your YouTube feed today with NoSlop!

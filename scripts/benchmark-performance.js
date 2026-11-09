@@ -11,8 +11,6 @@ if (global.gc) global.gc();
 const baseMem = process.memoryUsage();
 
 // 2. Load Engines
-const scoringCode = fs.readFileSync('content/engines/scoringEngine.js', 'utf8');
-const communityCode = fs.readFileSync('content/engines/communityEngine.js', 'utf8');
 const blocklistData = JSON.parse(fs.readFileSync('community-blocklist.json', 'utf8'));
 
 const sandbox = {
@@ -22,8 +20,9 @@ const sandbox = {
   clearTimeout: () => {}
 };
 vm.createContext(sandbox);
-vm.runInContext(communityCode, sandbox);
-vm.runInContext(scoringCode, sandbox);
+for (const name of ['textNormalization', 'semanticEngine', 'communityEngine', 'scoringEngine']) {
+  vm.runInContext(fs.readFileSync(`content/engines/${name}.js`, 'utf8'), sandbox);
+}
 
 // Initialize the statistical model with the bundled training corpus.
 sandbox.window.NoSlopCommunity.init([], blocklistData.channels, []);
@@ -31,6 +30,7 @@ sandbox.window.NoSlopCommunity.init([], blocklistData.channels, []);
 const calculateScore = sandbox.window.NoSlopScoring.calculateScore;
 
 // Measure Memory After Engine & 46k Database Loaded
+if (global.gc) global.gc();
 const loadedMem = process.memoryUsage();
 const heapUsedMB = (loadedMem.heapUsed - baseMem.heapUsed) / (1024 * 1024);
 const rssUsedMB = (loadedMem.rss - baseMem.rss) / (1024 * 1024);
@@ -38,8 +38,8 @@ const rssUsedMB = (loadedMem.rss - baseMem.rss) / (1024 * 1024);
 console.log('\n📊 1. MEMORY FOOTPRINT (RAM USAGE):');
 console.log(`   - Statistical model and training corpus:             ~${heapUsedMB.toFixed(2)} MB heap`);
 console.log(`   - Total Process RSS (V8 + Strings + Regexes):      ~${rssUsedMB.toFixed(2)} MB`);
-console.log(`   - Chrome Service Worker typical idle memory:       ~15 - 25 MB`);
-console.log(`   - Content script memory overhead in YouTube tab:   ~4 - 8 MB`);
+console.log(`   - Community entries:                              ${blocklistData.channels.length.toLocaleString()}`);
+console.log(`   - Model samples:                                  ${JSON.stringify(sandbox.window.NoSlopSemantic.getModelStats())}`);
 
 // 3. Benchmark CPU Evaluation Time
 const sampleCards = [
@@ -126,20 +126,21 @@ const avgUsPerCard = avgMsPerCard * 1000;
 const evalsPerSec = Math.round(ITERATIONS / (elapsedMs / 1000));
 
 console.log('\n⚡ 2. CPU EXECUTION TIME (SPEED & THROUGHPUT):');
+console.log('   - Scope: scoring with the semantic model; excludes DOM extraction and rendering');
 console.log(`   - Evaluated:               ${ITERATIONS.toLocaleString()} cards in batch`);
 console.log(`   - Total Processing Time:   ${elapsedMs.toFixed(2)} ms`);
-console.log(`   - Average Time per Card:   ${avgMsPerCard.toFixed(4)} ms (${avgUsPerCard.toFixed(1)} microseconds!)`);
+console.log(`   - Average Time per Card:   ${avgMsPerCard.toFixed(4)} ms (${avgUsPerCard.toFixed(1)} microseconds)`);
 console.log(`   - Evaluation Throughput:   ${evalsPerSec.toLocaleString()} cards / second`);
 console.log(`   - Budget per 60fps Frame:  16.6 ms`);
 console.log(`   - Frame Cost per Card:     ${((avgMsPerCard / 16.6) * 100).toFixed(2)}% of one single frame`);
 
-// 4. Infinite Scroll Simulation (1,000 cards in a 10-minute browsing session)
+// 4. Heap change after the scoring batch (not a browser scroll simulation).
+if (global.gc) global.gc();
 const postMem = process.memoryUsage();
 const leakMB = (postMem.heapUsed - loadedMem.heapUsed) / (1024 * 1024);
 
 console.log('\n🔄 3. LEAK & SCROLL STABILITY:');
-console.log(`   - Memory growth after 5,000 cards: ${leakMB.toFixed(3)} MB (effectively zero memory leak)`);
-console.log(`   - Viewport Laziness: Only 6-12 visible cards evaluated on load`);
-console.log(`   - Idle CPU when not scrolling:     0.0% CPU`);
+console.log(`   - Heap change after 5,000 cards: ${leakMB.toFixed(3)} MB${global.gc ? ' (after GC)' : ' (GC not forced)'}`);
+console.log('   - Browser memory, idle CPU, and long-session leaks require a live-browser measurement.');
 
 console.log('\n' + '='.repeat(65));

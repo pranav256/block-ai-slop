@@ -1,5 +1,5 @@
 /**
- * NoSlop - Multi-Signal Bayesian & Heuristic Scoring Engine (v5.1)
+ * NoSlop - Multi-Signal Heuristic Scoring Engine (v5.1)
  * Combines YouTube platform disclosures, creator hashtags, structural genre tropes,
  * lexical diversity, and statistical semantic vectors into an explainable score.
  */
@@ -44,15 +44,14 @@
 
     // 1. Pseudo-philosophy & dark psychology clickbait
     if (hasAny(['marcus aurelius', 'seneca', 'epictetus', 'stoic', 'stoicism', 'carl jung', 'dark psychology', 'sigma male']) &&
-        hasAny(['rules', 'habits', 'secrets', 'lessons', 'dangerous', 'destroy',
-          'cold and emotionless', 'unbothered', 'fear you', 'untouchable', 'integrate your shadow', 'make anyone obsessed'])) {
+        hasAny(['become dangerous', 'destroy your enemies', 'destroy someone',
+          'cold and emotionless', 'fear you', 'untouchable', 'make anyone obsessed'])) {
       signals.push({ score: 0.55, reason: 'Philosophy/Dark Psychology Slop Formula' });
     }
 
     // 2. Sensational science / space clickbait
     if (hasAny(['james webb', 'scientists', 'nasa', 'astronomers']) &&
-        hasAny(['detected', 'discovered', 'terrifying', 'terrified', 'broke physics',
-          'cannot explain', 'secret signal', 'hiding this', 'antarctica'])) {
+        hasAny(['terrifying', 'terrified', 'broke physics', 'secret signal', 'hiding this'])) {
       signals.push({ score: 0.55, reason: 'Sensational Science/Space Slop Formula' });
     }
 
@@ -152,8 +151,12 @@
       reasons.push(signal.reason);
     }
 
-    // 6. Semantic Vectorizer & Perplexity Style Model
-    const semantic = window.NoSlopSemantic?.predict?.(meta);
+    const threshold = Number.isFinite(options.sensitivityThreshold)
+      ? options.sensitivityThreshold
+      : 0.50;
+
+    // Text vectorization is unnecessary when stronger evidence already blocks.
+    const semantic = score < threshold ? window.NoSlopSemantic?.predict?.(meta) : null;
     if (semantic && typeof semantic.score === 'number') {
       if (semantic.score > score) {
         score = semantic.score;
@@ -163,10 +166,6 @@
       }
       evidence.model = semantic.evidence;
     }
-
-    const threshold = Number.isFinite(options.sensitivityThreshold)
-      ? options.sensitivityThreshold
-      : 0.50;
 
     const finalScore = Number(Math.min(1.0, Math.max(0.0, score)).toFixed(3));
     return {

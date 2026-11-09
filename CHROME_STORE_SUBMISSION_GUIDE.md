@@ -8,6 +8,8 @@ Everything you need has been prepared and generated in your repository:
 * 📜 **Privacy Policy:** [`PRIVACY.md`](PRIVACY.md) *(Mandatory for CWS approval)*
 * 📋 **Copy-Paste Listing Text:** [`CWS_STORE_LISTING.md`](CWS_STORE_LISTING.md)
 
+The existing ZIP predates the November 9 algorithm fixes. Rebuild it with `node scripts/build-extension-zip.js` and validate the result before uploading.
+
 ---
 
 ## Step 1: Open Chrome Web Store Developer Dashboard

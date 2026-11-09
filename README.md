@@ -2,7 +2,7 @@
 
 # 🛡️ NoSlop — AI Video Blocker for YouTube
 
-**Use local statistical scoring to identify low-effort generated content without hard-coded topic or channel rules.**
+**Use local metadata, community matches, and statistical scoring to hide low-effort generated content.**
 
 [![Manifest V3](https://img.shields.io/badge/Manifest-V3-blue.svg)](https://developer.chrome.com/docs/extensions/mv3/intro/)
 [![Version](https://img.shields.io/badge/version-5.0.0-rose.svg)](#)
@@ -17,13 +17,13 @@
 
 ---
 
-## 🎯 Algorithm-Only Automatic Blocking
+## 🎯 Local Hybrid Detection
 
 > **Important Distinction:** Real human creators (such as Neil deGrasse Tyson on *StarTalk*, Steven Bartlett on *The Diary Of A CEO*, or Lex Fridman) frequently interview AI pioneers (like Geoffrey Hinton) and use AI-generated robots or backgrounds in their thumbnails.
 
-NoSlop makes automatic decisions from local statistical features only. It does not directly block channel names, keywords, hashtags, disclosure phrases, story formulas, or verified creators. Explicit user block and allow entries remain available as personal overrides.
+NoSlop combines native YouTube synthetic disclosures, exact community channel/video matches, generation hashtags and text, genre heuristics, and statistical text features. Verified channels receive automatic protection by default, except when a native synthetic disclosure is present. Personal block and allow entries take priority; an allow entry wins if both match.
 
-Thumbnail analysis is disabled by default. Text is represented with hashed character n-grams and language-neutral style features, then evaluated using similarity, lexical diversity, repetition, entropy, punctuation, and title/description overlap.
+Thumbnail analysis is disabled by default. The text model uses hashed character n-grams and style features, and abstains when training or positive-versus-negative evidence is insufficient. These are heuristic scores, not guaranteed proof of AI authorship. See [the algorithm dossier](AUDIT_DOSSIER.md) for validation and remaining work.
 
 ---
 
@@ -31,19 +31,26 @@ Thumbnail analysis is disabled by default. Text is represented with hashed chara
 
 ```mermaid
 flowchart TD
-    VideoCard[YouTube Video Card / Feed Item] --> Features[Extract text and style features]
-    Features --> Training[Compare with optional local training corpus]
-    Training --> Score[Statistical model score]
+    VideoCard[YouTube Video Card / Feed Item] --> Overrides{Personal override?}
+    Overrides -- Allow --> Allow[Keep card]
+    Overrides -- Block --> Block[Hide card]
+    Overrides -- Neither --> Native{Native synthetic disclosure enabled?}
+    Native -- Yes --> Block
+    Native -- No --> Verified{Verified protection applies?}
+    Verified -- Yes --> Allow
+    Verified -- No --> Community{Enabled community match?}
+    Community -- Yes --> Block
+    Community -- No --> Score[Genre heuristics and trained text score]
     Score --> Decision{Score >= threshold?}
     Decision -- Yes --> Block[Hide card]
     Decision -- No --> Allow[Keep card]
 ```
 
-### Statistical Scoring Engine *(Primary / Default ON)*
-The model combines hashed character n-gram similarity with lexical diversity, repetition, entropy, punctuation, and title/description overlap. The final score is compared with the selected sensitivity threshold.
+### Hybrid Scoring Engine *(Default ON)*
+Native disclosures, generation text/hashtags, and specific genre co-occurrences provide heuristic signals. When those do not already reach sensitivity, the trained text model can contribute character similarity and style evidence. The largest signal score is compared with the selected threshold.
 
-### Optional Training Corpus
-The bundled community data is labeled positive training input for the model. It is never used as a direct channel, handle, or video blocking rule and can be refreshed from GitHub.
+### Community Blocklist and Model Seeds
+The community engine directly matches indexed channel names, handles, IDs, and video IDs. A bounded sample also seeds the text model. The list can be refreshed from GitHub; disabling community filtering leaves personal overrides active.
 
 ### Script Statistics
 The script analyzer contributes generic repetition, lexical diversity, sentence rhythm, and punctuation features. It contains no phrase dictionary.
@@ -78,8 +85,8 @@ Encountered a new AI video or channel that slipped through? **Block it without a
    * **`[Block Channel]`**: Adds an explicit personal channel override and hides it.
    * **`[Report Slop]`**: Instantly blocks it locally, saves the channel/video details in a local report queue, and opens a pre-filled [GitHub Issue Report](https://github.com/pranav256/block-ai-slop/issues/new?template=report-slop.yml).
 2. Use **Export JSON** in the popup to download the local report queue as a JSON file. The extension does not upload the queue automatically.
-3. Submitted reports can be reviewed as new labeled model-training data.
-4. Training data syncs automatically for users who enable it.
+3. Submitted reports can be reviewed for community entries and model-training data.
+4. Community data syncs automatically for users who enable it.
 
 ---
 
@@ -87,12 +94,12 @@ Encountered a new AI video or channel that slipped through? **Block it without a
 
 * **Sensitivity Selector**:
    * **Low (Conservative)**: Threshold = `0.65` (requires a higher statistical score)
-  * **Balanced (Default)**: Threshold = `0.50` (Recommended balance, blocks melodrama tropes and disclaimers)
-  * **High (Aggressive)**: Threshold = `0.35` (Aggressively purges anything resembling automated content)
+   * **Balanced (Default)**: Threshold = `0.50`
+   * **High (Aggressive)**: Threshold = `0.35` (lower evidence requirement)
 * **Placeholder Mode**:
   * **Off (Default / AdBlock Style)**: Videos completely vanish from the page (`display: none !important;`) with zero leftover whitespace.
   * **On**: Shows a minimal, collapsible hairline bar (*"AI video hidden — Click to view"*).
-* **Sync Now Button**: Manually refreshes the optional model-training corpus from GitHub.
+* **Sync Now Button**: Manually refreshes community data from GitHub.
 * **Allowlist**: Trusted channels can be exempted by name or handle from the popup's channel controls.
 
 ---
@@ -102,19 +109,20 @@ Encountered a new AI video or channel that slipped through? **Block it without a
 ```
 block-ai-slop/
 ├── manifest.json                       # Manifest V3 extension configuration
-├── community-blocklist.json            # Optional statistical training corpus
+├── community-blocklist.json            # Community matches and bounded model seeds
 ├── .github/
 │   └── ISSUE_TEMPLATE/
 │       └── report-slop.yml             # Structured crowdsource slop reporting form
 ├── background/
-│   └── background.js                   # Service worker & GitHub training-data sync
+│   └── background.js                   # Service worker & GitHub community-data sync
 ├── content/
 │   ├── content.js                      # Core DOM orchestrator & hover actions
 │   ├── content.css                     # Zero-gap hiding rules & unslop UI
 │   └── engines/
-│       ├── scoringEngine.js            # Engine 1: Multi-signal Bayesian heuristic
+│       ├── scoringEngine.js            # Engine 1: Heuristic and trained text scoring
+│       ├── semanticEngine.js           # Hashed character n-gram classifier
 │       ├── thumbnailEngine.js          # Engine 2: Canvas vision texture analyzer (Optional)
-│       ├── communityEngine.js          # User overrides and training data loader
+│       ├── communityEngine.js          # Personal overrides and exact community indexes
 │       └── audioScriptEngine.js        # Engine 4: Generic script pattern analysis
 ├── popup/
 │   ├── popup.html                      # Unslop control panel

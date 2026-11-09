@@ -227,7 +227,8 @@
   }
 
   function metadataSignature(meta) {
-    return `${meta.videoId || ''}||${meta.title}||${meta.channelName}||${(meta.snippet || '').slice(0, 30)}`;
+    return JSON.stringify([meta.videoId, meta.title, meta.fullUntruncatedTitle, meta.channelName,
+      meta.channelHref, meta.snippet, meta.badgeText, meta.cardText, meta.isVerified, meta.hasAiInfoButton, meta.isShort]);
   }
 
   function extractMetadata(rootCard) {
@@ -272,17 +273,20 @@
       else if (shortsMatch) videoId = shortsMatch[1];
     }
 
-    const title = titleCandidates.join(' ').replace(/\s+/g, ' ').trim();
+    const title = [...new Set(titleCandidates.map(value => value.replace(/\s+/g, ' ').trim()))].join(' ');
 
     // 2. Channel Name
     const channelEl = rootCard.querySelector(
       'ytd-channel-name, #channel-name, #text.ytd-channel-name, a.yt-simple-endpoint[href*="/@"], a.yt-simple-endpoint[href*="/channel/"], .yt-lockup-metadata-view-model-wiz__metadata a, #byline-container a, #channel-info, ytd-reel-player-header-renderer a'
     );
-    const channelName = (channelEl?.textContent || '').replace(/\s+/g, ' ').trim();
     const channelLink = channelEl?.matches?.('a[href*="/@"], a[href*="/channel/"]')
       ? channelEl
       : channelEl?.querySelector?.('a[href*="/@"], a[href*="/channel/"]');
+    const channelName = (channelLink?.textContent || channelEl?.textContent || '').replace(/\s+/g, ' ').trim();
     const channelHref = channelLink?.getAttribute('href') || channelEl?.getAttribute('href') || '';
+    const isVerified = Boolean(rootCard.querySelector(
+      '[aria-label="Verified" i], .badge-style-type-verified, .badge-style-type-verified-artist'
+    ));
 
     // 3. Description Snippet (Search Results)
     const snippetEl = rootCard.querySelector(
@@ -296,6 +300,9 @@
     )).map(b => b.textContent).join(' ');
 
     const cardText = (rootCard.textContent || '').replace(/\s+/g, ' ').trim();
+    const hasAiInfoButton = Boolean(rootCard.querySelector(
+      'button[aria-label*="How this content was made" i], button[aria-label*="Altered or synthetic" i]'
+    ));
 
     const isShort = Boolean(
       rootCard.matches('ytd-reel-item-renderer, ytm-shorts-lockup-view-model-v2') ||
@@ -311,10 +318,12 @@
       videoId,
       channelName,
       channelHref,
+      isVerified,
       snippet,
       scriptText: snippet,
       badgeText,
       cardText,
+      hasAiInfoButton,
       isShort,
       thumbnailImg
     };
@@ -330,7 +339,17 @@
       return { isBlocked: false, score: 0.0, reason: 'User Allowlist' };
     }
 
-    // 1. Engine 3: Community & Curated Blocklist Consensus (Instant O(1) multi-index lookup)
+    if (window.NoSlopCommunity?.isUserChannelBlocked?.(meta.channelName, meta.channelHref)) {
+      return { isBlocked: true, score: 1.0, reason: 'User Blacklist' };
+    }
+    if (settings.engineScoring !== false && settings.blockSyntheticDisclosures !== false && meta.hasAiInfoButton) {
+      return { isBlocked: true, score: 1.0, reason: 'YouTube synthetic-media disclosure' };
+    }
+    if (settings.whitelistVerified !== false && meta.isVerified) {
+      return { isBlocked: false, score: 0.0, reason: 'Verified creator protected' };
+    }
+
+    // 1. Engine 3: Community & Curated Blocklist Consensus (Exact indexed lookup)
     if (settings.engineCommunity !== false && window.NoSlopCommunity) {
       if (meta.videoId && window.NoSlopCommunity.isVideoBlocked?.(meta.videoId)) {
         return { isBlocked: true, score: 1.0, reason: 'Community Blocklisted Video ID' };
@@ -342,7 +361,7 @@
       }
     }
 
-    // 2. Engine 1: Multi-Signal Bayesian & Heuristic Scoring
+    // 2. Engine 1: Multi-Signal Heuristic Scoring
     if (settings.engineScoring !== false && window.NoSlopScoring) {
       const scoreFn = (typeof window.NoSlopScoring.calculateScore === 'function')
         ? window.NoSlopScoring.calculateScore

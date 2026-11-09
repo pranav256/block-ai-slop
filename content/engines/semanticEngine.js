@@ -3,9 +3,9 @@
  *
  * The model does not contain a list of AI words, genres, countries, or title
  * formulas. It learns a positive profile from the community blocklist and a
- * negative profile from verified/allowed creators and local feedback. Text is
+ * negative profile from baseline/allowed creator names and local feedback. Text is
  * represented with hashed character n-grams plus language-neutral style
- * features, so paraphrases and unknown languages remain usable.
+ * features. Similar spelling is evidence, not semantic understanding.
  */
 
 (() => {
@@ -70,9 +70,10 @@
     return features;
   }
 
-  function addToProfile(profile, features, count) {
+  function addToProfile(profile, features) {
     for (const [bucket, value] of features) {
-      profile[bucket] += (value - profile[bucket]) / count;
+      // Cosine similarity is unchanged by averaging the accumulated vectors.
+      profile[bucket] += value;
     }
   }
 
@@ -91,16 +92,11 @@
     if (!features.size) return;
     if (label > 0) {
       positiveCount++;
-      addToProfile(positive, features, positiveCount);
+      addToProfile(positive, features);
     } else {
       negativeCount++;
-      addToProfile(negative, features, negativeCount);
+      addToProfile(negative, features);
     }
-  }
-
-  function sourceKey(values) {
-    if (!Array.isArray(values) || values.length === 0) return '0';
-    return `${values.length}:${values[0]}:${values[values.length - 1]}`;
   }
 
   const DEFAULT_NEGATIVE_BASELINE = [
@@ -114,9 +110,7 @@
       ? negativeExamples
       : DEFAULT_NEGATIVE_BASELINE;
 
-    const positiveKey = sourceKey(positiveExamples);
-    const negativeKey = sourceKey(effectiveNegative);
-    const nextSignature = `${positiveKey}|${negativeKey}`;
+    const nextSignature = JSON.stringify([positiveExamples, effectiveNegative]);
     if (nextSignature === sourceSignature) return;
     sourceSignature = nextSignature;
 
@@ -188,7 +182,7 @@
     const title = meta.title || '';
     const snippet = meta.snippet || '';
     const channel = meta.channelName || '';
-    const text = normalize(`${title} ${meta.fullUntruncatedTitle || ''} ${snippet} ${meta.scriptText || ''}`);
+    const text = normalize([...new Set([meta.fullUntruncatedTitle || title, snippet, meta.scriptText || ''])].join(' '));
     const features = vectorize(text);
     const positiveSimilarity = cosine(features, positive, positiveCount);
     const negativeSimilarity = cosine(features, negative, negativeCount);
@@ -197,7 +191,7 @@
     const style = styleFeatures(meta, text);
     const learnedEvidence = Math.max(0, margin) * (1 - PROFILE_CONFIG.channelWeight) +
       channelSimilarity * PROFILE_CONFIG.channelWeight;
-    const score = Math.max(0, Math.min(1,
+    const rawScore = Math.max(0, Math.min(1,
       learnedEvidence * (1 - PROFILE_CONFIG.styleWeight) + style.generatedStyle * PROFILE_CONFIG.styleWeight
     ));
     const enoughEvidence = positiveCount >= 8 && positiveSimilarity >= PROFILE_CONFIG.minimumPositiveSimilarity &&
@@ -208,8 +202,8 @@
     if (style.generatedStyle >= 0.55) reasons.push('Repetitive title/description structure');
 
     return {
-      score,
-      rawScore: score,
+      score: enoughEvidence ? rawScore : 0,
+      rawScore,
       isTrained: positiveCount >= 8,
       reasons,
       evidence: {

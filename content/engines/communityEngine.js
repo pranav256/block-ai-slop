@@ -1,6 +1,6 @@
 /**
  * NoSlop - Engine 3: Community & Curated Blocklist Consensus (v5.1)
- * High-performance O(1) multi-index lookup of 46,000+ known AI slop channels,
+ * Compact exact multi-index lookup of 46,000+ known AI slop channels,
  * automated content mills, and micro-drama platforms.
  * Supports auto-syncing with centralized community-blocklist.json.
  */
@@ -217,8 +217,8 @@
     remoteChannelIds = new CompactExactIndex(channelIds);
     remoteNames = new CompactExactIndex(names);
 
-    // Initialize semantic model with labeled samples
-    window.NoSlopSemantic?.initialize?.(remoteChannels.slice(0, 500), allowedList);
+    // shortcut: these seeds are channel strings; use labeled video metadata when available.
+    window.NoSlopSemantic?.initialize?.(Array.isArray(remoteChannels) ? remoteChannels.slice(0, 500) : [], allowedList);
   }
 
   function isChannelAllowed(channelName, channelHref = '') {
@@ -236,12 +236,23 @@
     return false;
   }
 
+  function isUserChannelBlocked(channelName, channelHref = '') {
+    if (userBlockedChannels.has(normalize(channelName))) return true;
+    const cleanHref = channelHref.split('?')[0].replace(/\/+$/, '');
+    const handleMatch = cleanHref.match(/\/@([^/]+)/);
+    const idMatch = cleanHref.match(/\/channel\/([^/]+)/);
+    return Boolean(
+      (handleMatch && userBlockedChannels.has(normalize(handleMatch[1]))) ||
+      (idMatch && userBlockedChannels.has(normalize(idMatch[1])))
+    );
+  }
+
   function isChannelBlocked(channelName, channelHref = '') {
     const rawName = (channelName || '').toLowerCase().trim();
     const normName = normalize(channelName);
 
     // 1. Check user blacklisted channels (Highest Priority)
-    if (userBlockedChannels.has(rawName) || userBlockedChannels.has(normName)) {
+    if (isUserChannelBlocked(channelName, channelHref)) {
       return { blocked: true, source: 'User Blacklist' };
     }
 
@@ -266,9 +277,6 @@
         if (remoteHandles.has(normalize(handle))) {
           return { blocked: true, source: `Community Blocklist Handle (@${handle})` };
         }
-        if (userBlockedChannels.has(normalize(handle))) {
-          return { blocked: true, source: `User Blacklist (@${handle})` };
-        }
       }
 
       // Check channel ID (/channel/UC...)
@@ -278,13 +286,6 @@
         if (remoteChannelIds.has(id.toLowerCase())) {
           return { blocked: true, source: `Community Blocklist ID (${id})` };
         }
-      }
-    }
-
-    // 5. Pattern substring match for seeded drama mill phrases
-    for (const mill of SEEDED_DRAMA_MILLS) {
-      if (normName.includes(mill)) {
-        return { blocked: true, source: `Drama Mill Pattern: "${mill}"` };
       }
     }
 
@@ -299,6 +300,7 @@
   window.NoSlopCommunity = {
     init: initCommunityEngine,
     isChannelAllowed,
+    isUserChannelBlocked,
     isChannelBlocked,
     isVideoBlocked,
     normalize,
