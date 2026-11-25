@@ -3,12 +3,12 @@
 This step-by-step guide walks you through publishing **NoSlop** to the official **Google Chrome Web Store**.
 
 Everything you need has been prepared and generated in your repository:
-* 📦 **Production ZIP:** [`dist/noslop-v5.0.0-chrome-web-store.zip`](dist/noslop-v5.0.0-chrome-web-store.zip) *(Manifest V3 strictly validated)*
+* 📦 **Production ZIP:** [`dist/noslop-v5.1.0-chrome-web-store.zip`](dist/noslop-v5.1.0-chrome-web-store.zip) *(Rebuild after source changes)*
 * 🎨 **Store Graphics:** [`store_assets/`](store_assets) *(Tiles & Screenshots at exact 1280x800, 920x680, and 440x280 resolutions)*
 * 📜 **Privacy Policy:** [`PRIVACY.md`](PRIVACY.md) *(Mandatory for CWS approval)*
 * 📋 **Copy-Paste Listing Text:** [`CWS_STORE_LISTING.md`](CWS_STORE_LISTING.md)
 
-The existing ZIP predates the November 9 algorithm fixes. Rebuild it with `node scripts/build-extension-zip.js` and validate the result before uploading.
+Version 5.1 includes the November 25 detector fixes. Run the checks in `README.md`, rebuild with `node scripts/build-extension-zip.js`, and review the current privacy policy before uploading. Existing store screenshots predate the updated popup labels.
 
 ---
 
@@ -25,7 +25,7 @@ The existing ZIP predates the November 9 algorithm fixes. Rebuild it with `node 
 1. On your Developer Dashboard, click the blue **"New Item"** button in the top-right corner.
 2. In the upload dialog, drag and drop the ready-to-publish ZIP file:
    ```
-   d:\block-ai-slop\dist\noslop-v5.0.0-chrome-web-store.zip
+   dist\noslop-v5.1.0-chrome-web-store.zip
    ```
 3. The dashboard will automatically unpack the ZIP, validate `manifest.json`, and create your draft store listing.
 
@@ -89,7 +89,7 @@ Copy and paste each justification exactly:
   ```
 * **Host Permission (`*://*.youtube.com/*`):**
   ```
-  Required to run content scripts on YouTube pages to inspect video metadata and hide cards whose statistical score exceeds the selected threshold.
+  Required to inspect and hide YouTube cards, and retrieve public descriptions/channel IDs without account cookies for local classification.
   ```
 * **Host Permissions (`*://*.ytimg.com/*` and `*://*.ggpht.com/*`):**
   ```
@@ -101,7 +101,7 @@ Copy and paste each justification exactly:
   👉 Select **"No, I am not using remote code."** *(All scripts are bundled locally inside the extension package conforming to MV3 policies).*
 
 ### 4. Data Usage Disclosures
-* Check the declaration: **"I do not collect or use any user data"**.
+* Match the declarations to `PRIVACY.md`, including public video-ID requests to YouTube, browser-synced preferences and locally saved reports/feedback. No telemetry or external AI classification is used.
 * Certify compliance with Google's Limited Use policy.
 
 ### 5. Privacy Policy URL

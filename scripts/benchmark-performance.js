@@ -3,7 +3,7 @@ const vm = require('vm');
 const { performance } = require('perf_hooks');
 
 console.log('='.repeat(65));
-console.log('  NoSlop 5.0 - Performance & Resource Benchmark Harness');
+console.log('  NoSlop 5.1 - Performance & Resource Benchmark Harness');
 console.log('='.repeat(65));
 
 // 1. Measure Baseline Memory
@@ -20,7 +20,7 @@ const sandbox = {
   clearTimeout: () => {}
 };
 vm.createContext(sandbox);
-for (const name of ['textNormalization', 'semanticEngine', 'communityEngine', 'scoringEngine']) {
+for (const name of ['textNormalization', 'trainingData', 'semanticEngine', 'communityEngine', 'scoringEngine']) {
   vm.runInContext(fs.readFileSync(`content/engines/${name}.js`, 'utf8'), sandbox);
 }
 
@@ -116,7 +116,8 @@ const ITERATIONS = 5000;
 const start = performance.now();
 
 for (let i = 0; i < ITERATIONS; i++) {
-  const card = sampleCards[i % sampleCards.length];
+  const source = sampleCards[i % sampleCards.length];
+  const card = { ...source, title: `${source.title} [sample ${i}]` };
   calculateScore(card, { sensitivityThreshold: 0.50 });
 }
 
@@ -127,6 +128,7 @@ const evalsPerSec = Math.round(ITERATIONS / (elapsedMs / 1000));
 
 console.log('\n⚡ 2. CPU EXECUTION TIME (SPEED & THROUGHPUT):');
 console.log('   - Scope: scoring with the semantic model; excludes DOM extraction and rendering');
+console.log('   - Each benchmark title is unique to avoid measuring only prediction-cache hits.');
 console.log(`   - Evaluated:               ${ITERATIONS.toLocaleString()} cards in batch`);
 console.log(`   - Total Processing Time:   ${elapsedMs.toFixed(2)} ms`);
 console.log(`   - Average Time per Card:   ${avgMsPerCard.toFixed(4)} ms (${avgUsPerCard.toFixed(1)} microseconds)`);

@@ -1,5 +1,5 @@
 /**
- * NoSlop - Popup Script (v5.0)
+ * NoSlop - Popup Script (v5.1)
  * Protects legitimate human creators talking about AI while eliminating true AI slop mills.
  */
 
@@ -70,7 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Training data stats from local storage
       chrome.storage.local.get(['remoteChannels', 'lastCommunitySync'], (localData) => {
         const remoteCount = Array.isArray(localData?.remoteChannels) ? localData.remoteChannels.length : 0;
-        communityCountBadge.textContent = `${remoteCount.toLocaleString()} Examples`;
+        communityCountBadge.textContent = `${remoteCount.toLocaleString()} Entries`;
 
         if (localData?.lastCommunitySync) {
           const syncDate = new Date(localData.lastCommunitySync);
@@ -150,7 +150,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (response && response.success) {
         syncStatus.textContent = 'Connected & Synced';
         lastSyncTime.textContent = 'Just now';
-        communityCountBadge.textContent = `${(response.count || 0).toLocaleString()} Examples`;
+        communityCountBadge.textContent = `${(response.count || 0).toLocaleString()} Entries`;
       } else {
         syncStatus.textContent = 'Ready (Default list active)';
       }

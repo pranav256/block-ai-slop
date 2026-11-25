@@ -16,7 +16,7 @@
           <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line>
         </svg>
         <div class="brand-text">
-          <span class="brand-name">NoSlop 5.0</span>
+          <span class="brand-name">NoSlop 5.1</span>
           <span class="status-indicator" id="statusBadge">Active</span>
         </div>
       </div>
@@ -52,7 +52,7 @@
           <label class="rule-item no-border">
             <div class="rule-text">
               <span class="rule-label">1. Multi-signal heuristic scoring <span class="tag-default">Primary</span></span>
-              <span class="rule-desc">Bayesian probability across formulas, disclaimers, and generative models</span>
+              <span class="rule-desc">Disclosures, local examples, and public YouTube metadata</span>
             </div>
             <input type="checkbox" id="toggleEngineScoring" class="sub-toggle" checked>
           </label>
@@ -69,8 +69,8 @@
         <!-- Model training data -->
         <label class="rule-item">
           <div class="rule-text">
-            <span class="rule-label">2. Community training data</span>
-            <span class="rule-desc">Improves the statistical model without directly blocking by channel or name</span>
+            <span class="rule-label">2. Community blocklist</span>
+            <span class="rule-desc">Exact channel and video matches from the shared blocklist</span>
           </div>
           <input type="checkbox" id="toggleEngineCommunity" class="sub-toggle" checked>
         </label>
@@ -79,7 +79,7 @@
         <label class="rule-item">
           <div class="rule-text">
             <span class="rule-label">3. Script pattern analysis</span>
-            <span class="rule-desc">Identifies repetitive structure and low-diversity generated scripts</span>
+            <span class="rule-desc">Repetition checks with supporting text evidence</span>
           </div>
           <input type="checkbox" id="toggleEngineAudioScript" class="sub-toggle" checked>
         </label>
@@ -98,8 +98,8 @@
     <!-- Model Training Data Sync -->
     <section class="section">
       <div class="section-header">
-        <h2 class="section-title">Model training data</h2>
-        <span class="badge-recommended" id="communityCountBadge">0 Examples</span>
+        <h2 class="section-title">Community blocklist</h2>
+        <span class="badge-recommended" id="communityCountBadge">0 Entries</span>
       </div>
       <div class="community-sync-box">
         <div class="community-sync-info">
@@ -107,7 +107,7 @@
           <span class="community-sync-time" id="lastSyncTime">Syncs automatically</span>
         </div>
         <div class="community-sync-actions">
-          <button type="button" id="syncNowBtn" class="btn btn-secondary btn-sm">Sync training data</button>
+          <button type="button" id="syncNowBtn" class="btn btn-secondary btn-sm">Sync blocklist</button>
           <button type="button" id="exportReportsBtn" class="btn btn-secondary btn-sm" title="Download queued reports as a JSON file">Export JSON</button>
         </div>
       </div>

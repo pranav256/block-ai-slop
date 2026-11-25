@@ -42,8 +42,9 @@ Most naive filters block anything with the word "AI" or any video with an AI-gen
 
 NoSlop solves this with a multi-signal detection pipeline:
 • Local hybrid decisions: native synthetic disclosures, exact community matches, generation text/hashtags, and genre heuristics.
-• Trained text features: hashed n-grams and style statistics, with an evidence gate before contributing a score.
-• Verified-channel protection by default, except for native synthetic disclosures; personal allow/block choices take priority.
+• Trained text features: nearest-example character/word similarity with human controls and an evidence gate.
+• Verified channels are protected from weak guesses; explicit production disclosures and exact blocklist matches still apply. Personal allow choices win over matching blocks.
+• Undecided cards can use public YouTube descriptions and channel IDs, fetched without account cookies. Classification stays local.
 • Human-First Defaults: Visual thumbnail scanning is disabled by default to protect creators using AI artwork.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -51,14 +52,14 @@ NoSlop solves this with a multi-signal detection pipeline:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 1. Hybrid Scoring Engine:
    • Uses native synthetic disclosures, generation text/hashtags, and genre heuristics.
-   • Adds trained character similarity and style evidence when earlier signals do not already block.
+   • Adds trained character/word similarity when earlier signals do not already block. Independent evidence can reinforce a decision; correlated text signals share one vote.
 
 2. Community Blocklist:
-   • Directly matches indexed channels and video IDs; a bounded sample also seeds the text model.
+   • Directly matches indexed channels and video IDs. Video-text training seeds are separate from channel identities.
    • Community data can be refreshed from GitHub every 6 hours.
 
 3. Script Statistics:
-   • Measures generic repetition, lexical diversity, sentence rhythm, and punctuation regularity.
+   • Measures repetition, lexical diversity and sentence rhythm, requiring supporting text evidence before blocking.
 
 4. 1-Click Hover Actions:
    • Hover over any video card on YouTube to apply a personal override or report it with a pre-filled GitHub issue.
@@ -67,7 +68,8 @@ NoSlop solves this with a multi-signal detection pipeline:
 🔒 100% PRIVACY FIRST & IN-MEMORY
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 • Zero tracking, zero telemetry, zero analytics.
-• 100% in-memory local processing inside your browser sandbox.
+• Local classification inside your browser; preferences and user reports persist in browser storage.
+• Best-effort public metadata lookups send the requested video ID to YouTube, without account cookies. Requests are bounded, cached temporarily and paused on errors/rate limits.
 • No automatic browsing-history collection or upload. User-selected reports stay local and can open a pre-filled GitHub issue.
 • Fully open-source under the MIT license on GitHub: https://github.com/pranav256/block-ai-slop
 
@@ -104,7 +106,7 @@ Used to schedule optional model training data refresh every 6 hours without runn
 
 #### Host Permissions: `*://*.youtube.com/*`
 ```
-Required to run content scripts on YouTube pages to inspect video metadata and hide cards whose statistical score exceeds the selected threshold.
+Required to inspect and hide YouTube cards, and retrieve public descriptions/channel IDs without account cookies for local classification.
 ```
 
 #### Host Permissions: `*://*.ytimg.com/*` and `*://*.ggpht.com/*`
@@ -118,7 +120,7 @@ Required to optionally load video thumbnail image bitmaps into an offscreen HTML
 
 ### Data Usage Declarations
 In the "Data usage" section:
-* Check: **"I do not collect or use any user data"** (or certify that data is not sold or used for personalized advertising).
+* Match the declarations to `PRIVACY.md`: public video IDs are requested from YouTube without account cookies; preferences may use browser sync; user reports and training feedback persist locally. No telemetry or external AI classification is used. Do not describe the extension as making no video-specific requests.
 
 ---
 

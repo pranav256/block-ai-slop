@@ -157,6 +157,27 @@
       .trim();
   }
 
+  function identity(value) {
+    if (typeof value !== 'string') return '';
+    const raw = value.trim().replace(/^(?:https?:\/\/)?(?:www\.|m\.)?youtube\.com(?=\/)/i, '').split(/[?#]/)[0].replace(/\/+$/, '');
+    const id = raw.match(/^\/channel\/(UC[a-zA-Z0-9_-]{22})(?:\/.*)?$/) || raw.match(/^(UC[a-zA-Z0-9_-]{22})$/);
+    if (id) return `id:${id[1]}`;
+    const handle = raw.match(/^\/?@([^/]+)(?:\/.*)?$/);
+    if (handle) {
+      let decoded = handle[1];
+      try { decoded = decodeURIComponent(decoded); } catch { /* Keep malformed encodings literal. */ }
+      return `handle:${decoded.normalize('NFKC').toLowerCase()}`;
+    }
+    return raw && !raw.startsWith('/') && !raw.includes('://') ? `name:${normalize(raw)}` : '';
+  }
+
+  function personalMatch(entries, channelName, channelHref) {
+    if (entries.has(identity(channelHref))) return true;
+    if (entries.has(identity(channelName))) return true;
+    // Preserve name-only matching for old personal @handle entries when links are absent.
+    return !channelHref && entries.has(identity(`@${channelName || ''}`));
+  }
+
   function initCommunityEngine(userList = [], remoteChannels = [], remoteVideos = [], allowedList = []) {
     // Support calling init with 3 args: (userList, remoteChannels, allowedList)
     if (Array.isArray(remoteVideos) && allowedList.length === 0 && remoteVideos.some(x => typeof x === 'string' && x.startsWith('@'))) {
@@ -167,13 +188,13 @@
     userBlockedChannels = new Set(
       (Array.isArray(userList) ? userList : [])
         .filter(item => typeof item === 'string')
-        .map(normalize)
+        .map(identity)
         .filter(Boolean)
     );
     allowedChannels = new Set(
       (Array.isArray(allowedList) ? allowedList : [])
         .filter(item => typeof item === 'string')
-        .map(normalize)
+        .map(identity)
         .filter(Boolean)
     );
     remoteBlockedVideos = new Set(
@@ -187,64 +208,25 @@
 
     for (const item of (Array.isArray(remoteChannels) ? remoteChannels : [])) {
       if (typeof item !== 'string' || !item.trim()) continue;
-      const str = item.trim();
-
-      // Channel URL format (/channel/UC...)
-      if (str.startsWith('/channel/')) {
-        const id = str.replace('/channel/', '').split('/')[0].split('?')[0];
-        channelIds.push(id.toLowerCase());
-        continue;
-      }
-
-      // Handle format (/@handle or @handle)
-      if (str.startsWith('/@') || str.startsWith('@')) {
-        const handle = str.replace(/^\/?@/, '').toLowerCase().split('/')[0].split('?')[0];
-        handles.push(normalize(handle));
-        continue;
-      }
-
-      // Raw YouTube Channel ID (UC...)
-      if (/^UC[a-zA-Z0-9_-]{20,}$/.test(str)) {
-        channelIds.push(str.toLowerCase());
-        continue;
-      }
-
-      // Channel Name
-      names.push(normalize(str));
+      const key = identity(item);
+      if (key.startsWith('id:')) channelIds.push(key.slice(3));
+      else if (key.startsWith('handle:')) handles.push(key.slice(7));
+      else if (key.startsWith('name:')) names.push(key.slice(5));
     }
 
     remoteHandles = new CompactExactIndex(handles);
     remoteChannelIds = new CompactExactIndex(channelIds);
     remoteNames = new CompactExactIndex(names);
 
-    // shortcut: these seeds are channel strings; use labeled video metadata when available.
-    window.NoSlopSemantic?.initialize?.(Array.isArray(remoteChannels) ? remoteChannels.slice(0, 500) : [], allowedList);
+    window.NoSlopSemantic?.initializeDefaults?.();
   }
 
   function isChannelAllowed(channelName, channelHref = '') {
-    const rawName = (channelName || '').toLowerCase().trim();
-    const normName = normalize(channelName);
-
-    if (allowedChannels.has(rawName) || allowedChannels.has(normName)) return true;
-    if (channelHref) {
-      const cleanHref = channelHref.split('?')[0].replace(/\/+$/, '');
-      const handleMatch = cleanHref.match(/\/@([^/]+)/);
-      if (handleMatch && allowedChannels.has(normalize(handleMatch[1]))) return true;
-      const idMatch = cleanHref.match(/\/channel\/([^/]+)/);
-      if (idMatch && allowedChannels.has(normalize(idMatch[1]))) return true;
-    }
-    return false;
+    return personalMatch(allowedChannels, channelName, channelHref);
   }
 
   function isUserChannelBlocked(channelName, channelHref = '') {
-    if (userBlockedChannels.has(normalize(channelName))) return true;
-    const cleanHref = channelHref.split('?')[0].replace(/\/+$/, '');
-    const handleMatch = cleanHref.match(/\/@([^/]+)/);
-    const idMatch = cleanHref.match(/\/channel\/([^/]+)/);
-    return Boolean(
-      (handleMatch && userBlockedChannels.has(normalize(handleMatch[1]))) ||
-      (idMatch && userBlockedChannels.has(normalize(idMatch[1])))
-    );
+    return personalMatch(userBlockedChannels, channelName, channelHref);
   }
 
   function isChannelBlocked(channelName, channelHref = '') {
@@ -267,26 +249,12 @@
     }
 
     // 4. Check channel handle and ID from href
-    if (channelHref) {
-      const cleanHref = channelHref.split('?')[0].replace(/\/+$/, '');
-
-      // Check handle (/@...)
-      const handleMatch = cleanHref.match(/\/@([^/]+)/);
-      if (handleMatch) {
-        const handle = handleMatch[1].toLowerCase();
-        if (remoteHandles.has(normalize(handle))) {
-          return { blocked: true, source: `Community Blocklist Handle (@${handle})` };
-        }
-      }
-
-      // Check channel ID (/channel/UC...)
-      const idMatch = cleanHref.match(/\/channel\/([^/]+)/);
-      if (idMatch) {
-        const id = idMatch[1];
-        if (remoteChannelIds.has(id.toLowerCase())) {
-          return { blocked: true, source: `Community Blocklist ID (${id})` };
-        }
-      }
+    const key = identity(channelHref);
+    if (key.startsWith('handle:') && remoteHandles.has(key.slice(7))) {
+      return { blocked: true, source: 'Community Blocklist Handle' };
+    }
+    if (key.startsWith('id:') && remoteChannelIds.has(key.slice(3))) {
+      return { blocked: true, source: 'Community Blocklist ID' };
     }
 
     return { blocked: false };

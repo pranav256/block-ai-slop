@@ -1,486 +1,246 @@
-const http = require('http');
-const { spawn } = require('child_process');
-const fs = require('fs');
+/** Real Chromium DOM regressions; Chrome APIs are mocked, engines are unmodified. */
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const http = require('node:http');
+const { spawn } = require('node:child_process');
 
-const BRAVE_PATH = 'C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe';
-const EXT_PATH = 'D:\\block-ai-slop';
-const TEMP_PROFILE = 'C:\\Users\\Pranav\\AppData\\Local\\Temp\\noslop-cdp-profile';
-const PORT = 9224;
-const HTTP_PORT = 8089;
-
-// 1. Create a mock YouTube search / feed HTML page with real YouTube DOM structure
-function generateYouTubeHTML() {
-  const cardTemplates = [
-    {
-      title: "Behind 🔥 #drama",
-      channel: "Velvet Romance",
-      snippet: "Watch the complete AI-generated romance drama from Velvet Romance A cinematic love story filled with betrayal, obsession...",
-      isVerified: false,
-      expectedBlocked: true
-    },
-    {
-      title: "💔 He Thought His Plan Was Perfect... But His Wife Knew Everything!#ai",
-      channel: "Drama Diary",
-      snippet: "English Dub AI Drama ❤️ Welcome to the world of Drama Diary! Enjoy the full series without interruptions ✨ This video uses...",
-      isVerified: false,
-      expectedBlocked: true
-    },
-    {
-      title: "Marcus Aurelius: 7 Rules to Become Dangerous (Stoicism)",
-      channel: "Stoic Mindset",
-      snippet: "Discover Marcus Aurelius's rules to become dangerous and rule your mind in silence.",
-      isVerified: false,
-      expectedBlocked: true
-    },
-    {
-      title: "James Webb Telescope Just Detected Something Terrifying That Broke Physics",
-      channel: "Cosmo Space Hub",
-      snippet: "Scientists are terrified by what James Webb just detected outside our solar system.",
-      isVerified: false,
-      expectedBlocked: true
-    },
-    {
-      title: "r/AITA for leaving my cheating wife with nothing after she brought her AP home?",
-      channel: "Reddit Stories Daily",
-      snippet: "Voice generated using ElevenLabs. Best of Reddit updates and drama.",
-      isVerified: false,
-      expectedBlocked: true
-    },
-    {
-      title: "Is AI Hiding Its Full Power? With Geoffrey Hinton",
-      channel: "StarTalk",
-      snippet: "Go to https://ground.news/startalk to stay fully informed on the latest scientific discoveries.",
-      isVerified: true,
-      expectedBlocked: false
-    },
-    {
-      title: "Stoicism as a Way of Life - Seneca, Epictetus, Marcus Aurelius",
-      channel: "Einzelgänger",
-      snippet: "An introduction to the philosophy of Stoicism and its historical background.",
-      isVerified: true,
-      expectedBlocked: false
-    },
-    {
-      title: "15 Minute Easy Pasta Recipe for Beginners",
-      channel: "Cooking With Jack",
-      snippet: "A quick and delicious homemade dinner recipe anyone can make in 15 minutes.",
-      isVerified: false,
-      expectedBlocked: false
-    }
-  ];
-
-  let cardsHtml = '';
-  // Repeat cards 10 times (80 cards total) to test realistic search feed
-  for (let i = 0; i < 80; i++) {
-    const item = cardTemplates[i % cardTemplates.length];
-    const verifiedBadge = item.isVerified ? '<span class="badge-style-type-verified" aria-label="Verified">✓</span>' : '';
-    cardsHtml += `
-      <ytd-video-renderer class="style-scope ytd-item-section-renderer" style="margin-bottom: 16px; display: block;">
-        <div id="dismissible" class="style-scope ytd-video-renderer" style="display: flex; gap: 16px;">
-          <ytd-thumbnail class="style-scope ytd-video-renderer" style="width: 360px; height: 202px; background: #222; flex-shrink: 0;">
-            <a id="thumbnail" href="/watch?v=mock_${i}">
-              <img src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='202'><rect fill='%23333' width='360' height='202'/></svg>">
-            </a>
-          </ytd-thumbnail>
-          <div class="text-wrapper style-scope ytd-video-renderer" style="flex: 1;">
-            <div id="title-wrapper" class="style-scope ytd-video-renderer">
-              <h3 class="title-and-badge style-scope ytd-video-renderer">
-                <a id="video-title" class="yt-simple-endpoint style-scope ytd-video-renderer" href="/watch?v=mock_${i}" title="${item.title}">
-                  ${item.title}
-                </a>
-              </h3>
-              <div id="menu" class="style-scope ytd-video-renderer"><button id="button" aria-label="Action menu">⋮</button></div>
-            </div>
-            <div id="channel-info" class="style-scope ytd-video-renderer" style="margin-top: 8px;">
-              <ytd-channel-name id="channel-name" class="style-scope ytd-video-renderer">
-                <div id="container" class="style-scope ytd-channel-name">
-                  <div id="text-container" class="style-scope ytd-channel-name">
-                    <a class="yt-simple-endpoint style-scope yt-formatted-string" href="/@${item.channel.replace(/\s+/g, '')}">${item.channel}</a>
-                    ${verifiedBadge}
-                  </div>
-                </div>
-              </ytd-channel-name>
-            </div>
-            <div class="metadata-snippet-container style-scope ytd-video-renderer" style="margin-top: 8px; color: #aaa; font-size: 13px;">
-              <span id="description-text" class="style-scope ytd-video-renderer">${item.snippet}</span>
-            </div>
-          </div>
-        </div>
-      </ytd-video-renderer>
-    `;
-  }
-
-  return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8">
-      <title>YouTube Mock Search - NoSlop CDP Benchmark</title>
-      <style>
-        body { background: #0f0f0f; color: #fff; font-family: Roboto, Arial, sans-serif; margin: 20px; }
-        #contents { max-width: 1080px; margin: 0 auto; }
-      </style>
-    </head>
-    <body>
-      <div id="contents">
-        ${cardsHtml}
-      </div>
-    </body>
-    </html>
-  `;
-}
-
-// 2. Start Local HTTP Server
-const server = http.createServer((req, res) => {
-  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-  res.end(generateYouTubeHTML());
-});
-
-server.listen(HTTP_PORT, async () => {
-  console.log(`🌐 Local mock YouTube server listening at http://localhost:${HTTP_PORT}`);
-  runCDPTest().catch(console.error);
-});
-
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-function getJson(url) {
-  return new Promise((resolve, reject) => {
-    http.get(url, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try { resolve(JSON.parse(data)); } catch (e) { resolve(null); }
-      });
-    }).on('error', reject);
-  });
-}
+const root = path.resolve(__dirname, '..');
+const browserPath = process.env.NOSLOP_BROWSER || [
+  'C:/Program Files/BraveSoftware/Brave-Browser/Application/brave.exe',
+  'C:/Program Files/Google/Chrome/Application/chrome.exe',
+  'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
+  '/usr/bin/chromium', '/usr/bin/chromium-browser', '/usr/bin/google-chrome'
+].find(file => fs.existsSync(file));
+assert.ok(browserPath, 'Set NOSLOP_BROWSER to an installed Chromium browser.');
+const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 class CDPClient {
-  constructor(wsUrl) {
-    this.wsUrl = wsUrl;
-    this.ws = null;
-    this.nextId = 1;
-    this.callbacks = new Map();
-  }
-
+  constructor(url) { this.ws = new WebSocket(url); this.id = 0; this.pending = new Map(); }
   async connect() {
-    return new Promise((resolve, reject) => {
-      this.ws = new WebSocket(this.wsUrl);
-      this.ws.onopen = resolve;
-      this.ws.onerror = reject;
-      this.ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
-        if (msg.id && this.callbacks.has(msg.id)) {
-          const { resolve, reject } = this.callbacks.get(msg.id);
-          this.callbacks.delete(msg.id);
-          if (msg.error) reject(new Error(msg.error.message));
-          else resolve(msg.result);
-        }
-      };
-    });
+    await new Promise((resolve, reject) => { this.ws.onopen = resolve; this.ws.onerror = reject; });
+    this.ws.onmessage = event => {
+      const message = JSON.parse(event.data);
+      const request = this.pending.get(message.id);
+      if (!request) return;
+      this.pending.delete(message.id);
+      clearTimeout(request.timeout);
+      if (message.error) request.reject(new Error(message.error.message)); else request.resolve(message.result);
+    };
   }
-
   send(method, params = {}) {
     return new Promise((resolve, reject) => {
-      const id = this.nextId++;
-      this.callbacks.set(id, { resolve, reject });
+      const id = ++this.id;
+      const timeout = setTimeout(() => { this.pending.delete(id); reject(new Error(`CDP timeout: ${method}`)); }, 10000);
+      this.pending.set(id, { resolve, reject, timeout });
       this.ws.send(JSON.stringify({ id, method, params }));
     });
   }
-
-  close() {
-    if (this.ws) this.ws.close();
+  async evaluate(expression) {
+    const result = await this.send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
+    if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text);
+    return result.result.value;
   }
+  close() { for (const request of this.pending.values()) clearTimeout(request.timeout); this.ws.close(); }
 }
 
-async function runCDPTest() {
-  if (fs.existsSync(TEMP_PROFILE)) {
-    try { fs.rmSync(TEMP_PROFILE, { recursive: true, force: true }); } catch {}
-  }
-
-  const braveArgs = [
-    `--remote-debugging-port=${PORT}`,
-    `--user-data-dir=${TEMP_PROFILE}`,
-    `--load-extension=${EXT_PATH}`,
-    `--disable-gpu`,
-    `--no-first-run`,
-    `--no-default-browser-check`,
-    `http://localhost:${HTTP_PORT}`
-  ];
-
-  console.log('🚀 Launching Brave with NoSlop extension...');
-  const browser = spawn(BRAVE_PATH, braveArgs, { stdio: 'ignore' });
-
-  // Wait for browser debug endpoint
-  let connected = false;
-  let targetWsUrl = null;
-  for (let i = 0; i < 30; i++) {
-    await sleep(400);
-    try {
-      const list = await getJson(`http://localhost:${PORT}/json/list`);
-      if (list && list.length > 0) {
-        const page = list.find(t => t.type === 'page' && t.url.includes(String(HTTP_PORT)));
-        if (page && page.webSocketDebuggerUrl) {
-          targetWsUrl = page.webSocketDebuggerUrl;
-          connected = true;
-          break;
-        }
-      }
-    } catch {}
-  }
-
-  if (!connected) {
-    console.error('❌ Failed to connect to CDP page');
-    browser.kill();
-    server.close();
-    process.exit(1);
-  }
-
-  console.log('✅ Connected to Chromium DevTools Protocol via WebSocket.');
-  const client = new CDPClient(targetWsUrl);
-  await client.connect();
-
-  await client.send('Performance.enable');
-  await client.send('Runtime.enable');
-  await client.send('Page.enable');
-
-  console.log('💉 Injecting NoSlop engines, content script & CSS into live Chromium DOM...');
-
-  const normalizationCode = fs.readFileSync('content/engines/textNormalization.js', 'utf8');
-  const semanticCode = fs.readFileSync('content/engines/semanticEngine.js', 'utf8');
-  const communityCode = fs.readFileSync('content/engines/communityEngine.js', 'utf8');
-  const scoringCode = fs.readFileSync('content/engines/scoringEngine.js', 'utf8');
-  const contentCode = fs.readFileSync('content/content.js', 'utf8');
-  const contentCss = fs.readFileSync('content/content.css', 'utf8');
-  const blocklist = JSON.parse(fs.readFileSync('community-blocklist.json', 'utf8'));
-
-  // Inject CSS
-  await client.send('Runtime.evaluate', {
-    expression: `
-      (() => {
-        const style = document.createElement('style');
-        style.textContent = ${JSON.stringify(contentCss)};
-        document.head.appendChild(style);
-      })()
-    `
+async function run() {
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'noslop-cdp-'));
+  const server = http.createServer((request, response) => {
+    response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    response.end('<!doctype html><html><head><title>NoSlop DOM regression fixture</title></head><body><main></main></body></html>');
   });
-
-  // Inject Mock Chrome API if running in webpage context
-  await client.send('Runtime.evaluate', {
-    expression: `
-      window.__testChannels = ${JSON.stringify(blocklist.channels)};
+  let browser, client;
+  try {
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    const url = `http://127.0.0.1:${server.address().port}`;
+    browser = spawn(browserPath, ['--headless=new', '--window-size=1280,1600', '--remote-debugging-port=0', `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', '--disable-background-networking', `--disable-extensions-except=${root}`, `--load-extension=${root}`, url], { windowsHide: true, stdio: 'ignore' });
+    let port;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      try { port = fs.readFileSync(path.join(profile, 'DevToolsActivePort'), 'utf8').split('\n')[0]; break; } catch { await pause(100); }
+    }
+    assert.ok(port, 'Browser did not expose a debugging port.');
+    let targets = [];
+    for (let attempt = 0; attempt < 50; attempt++) {
+      targets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
+      if (targets.some(target => target.url.startsWith(url))) break;
+      await pause(100);
+    }
+    const target = targets.find(target => target.url.startsWith(url));
+    assert.ok(target, 'Fixture tab did not open.');
+    client = new CDPClient(target.webSocketDebuggerUrl);
+    await client.connect();
+    await client.send('Runtime.enable');
+    await client.send('Performance.enable');
+    for (let attempt = 0; attempt < 50; attempt++) {
+      if (await client.evaluate("Boolean(document.querySelector('main'))")) break;
+      await pause(100);
+    }
+    const css = fs.readFileSync(path.join(root, 'content/content.css'), 'utf8');
+    await client.evaluate(`(() => {
+      const style = document.createElement('style'); style.textContent = ${JSON.stringify(css)}; document.head.append(style);
+      window.testMetadata = {}; window.metadataCalls = []; window.sentMessages = [];
+      window.changeSettings = null;
       window.chrome = {
+        runtime: { lastError: null, onMessage: { addListener() {} }, sendMessage(message, callback) {
+          sentMessages.push(message);
+          if (message.action === 'getVideoMetadata') { metadataCalls.push(message.videoId); setTimeout(() => callback(testMetadata[message.videoId] || null), 60); }
+        } },
         storage: {
-          sync: {
-            get: (defaults, cb) => cb({
-              enabled: true,
-              engineScoring: true,
-              engineCommunity: true,
-              sensitivity: 'balanced',
-              placeholderMode: false,
-            }),
-            set: () => {}
-          },
-          local: {
-            get: (keys, cb) => cb({ remoteChannels: window.__testChannels }),
-            set: () => {}
-          },
-          onChanged: { addListener: (listener) => { window.__noslopSettingsChanged = listener; } }
-        },
-        runtime: {
-          sendMessage: () => {},
-          onMessage: { addListener: () => {} }
+          sync: { get(keys, callback) { callback({ sensitivity: 'balanced' }); }, set() {} },
+          local: { get(keys, callback) { callback({ remoteChannels: ['UCabcdefghijklmnopqrstuv'] }); }, set() {} },
+          onChanged: { addListener(listener) { window.changeSettings = listener; } }
         }
       };
-    `
-  });
+      window.addCard = (id, title, options = {}) => {
+        const card = document.createElement(options.tag || 'ytd-video-renderer'); card.id = id;
+        if (options.className) card.className = options.className;
+        card.style.cssText = 'display:block;min-height:70px;margin:8px';
+        card.innerHTML = '<h3><a id="video-title"></a></h3><ytd-channel-name><a href="/@fixture">Fixture Human</a></ytd-channel-name><div id="description-text"></div><div id="menu"></div>';
+        const link = card.querySelector('#video-title'); link.textContent = title; link.setAttribute('aria-label', title + ' by Fixture Human 10K views'); link.href = '/watch?v=' + (options.videoId || id.padEnd(11, '0').slice(0,11));
+        card.querySelector('#description-text').textContent = options.snippet || '';
+        if (options.verified) { const badge = document.createElement('span'); badge.setAttribute('aria-label', 'Verified'); card.append(badge); }
+        if (options.badge) { const badge = document.createElement('button'); badge.setAttribute('aria-label', options.badge); card.append(badge); }
+        (options.parent || document.querySelector('main')).append(card);
+        return card;
+      };
+      window.waitFor = async (predicate, label) => {
+        for (let attempt = 0; attempt < 200; attempt++) { if (predicate()) return; await new Promise(resolve => setTimeout(resolve, 25)); }
+        throw new Error('Timed out: ' + label);
+      };
+      window.cardStatus = id => document.getElementById(id).dataset.noslopStatus;
+      window.visible = id => getComputedStyle(document.getElementById(id)).display !== 'none';
+      addCard('bad', 'An AI-generated animal adventure');
+      addCard('human', 'How AI-generated scams work: a researcher explains');
+      addCard('native', 'A generated city', { badge: 'AI content' });
+      addCard('camera', 'A walk in the forest', { badge: 'How this content was made' });
+      testMetadata.deep0000001 = { videoId: 'deep0000001', title: 'Sunset', description: 'All visuals generated using Kling.', channelName: 'Unseen Studio' };
+      addCard('deep', 'Sunset', { videoId: 'deep0000001' });
+      testMetadata.id000000001 = { videoId: 'id000000001', title: 'A new story', channelId: 'UCabcdefghijklmnopqrstuv', channelName: 'Unseen Handle' };
+      addCard('channelid', 'A new story', { videoId: 'id000000001' });
+      addCard('verified', 'An AI-generated song', { verified: true });
+      const wrapper = document.createElement('ytd-rich-item-renderer'); wrapper.id = 'shelf-wrapper';
+      const shelf = document.createElement('grid-shelf-view-model'); shelf.id = 'shelf'; wrapper.append(shelf); document.querySelector('main').append(wrapper);
+      for (const [id, title] of [['shortbad', 'Made with AI #aivideo'], ['shortgood', 'My cat playing with a toy']]) {
+        const cell = document.createElement('div'); cell.id = id; cell.className = 'ytGridShelfViewModelGridShelfItem'; shelf.append(cell);
+        const short = addCard(id + '-v2', title, { tag: 'ytm-shorts-lockup-view-model-v2', parent: cell });
+        short.querySelector('#video-title').href = '/shorts/' + id.padEnd(11, '0');
+        const inner = document.createElement('ytm-shorts-lockup-view-model');
+        while (short.firstChild) inner.append(short.firstChild);
+        short.append(inner);
+      }
+      addCard('modern', 'Generated fantasy #aianimation', { tag: 'div', className: 'yt-lockup-view-model' });
+      const nested = addCard('nested', 'Generated underwater world #aivideo', { tag: 'yt-lockup-view-model' });
+      const inner = document.createElement('div'); inner.className = 'yt-lockup-view-model';
+      while (nested.firstChild) inner.append(nested.firstChild);
+      nested.append(inner);
+      const legacy = document.createElement('ytd-reel-shelf-renderer'); legacy.id = 'legacy-shelf'; document.querySelector('main').append(legacy);
+      addCard('legacy-short', 'An AI-generated animation', { tag: 'ytd-reel-item-renderer', parent: legacy });
+    })()`);
+    const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
+    for (const file of manifest.content_scripts[0].js) await client.evaluate(fs.readFileSync(path.join(root, file), 'utf8'));
+    const initial = await client.evaluate(`(async () => {
+      await waitFor(() => cardStatus('bad') === 'blocked' && cardStatus('deep') === 'blocked' && cardStatus('channelid') === 'blocked', 'initial and metadata blocks');
+      await waitFor(() => cardStatus('shortgood') === 'clean' && cardStatus('camera') === 'clean' && cardStatus('nested') === 'blocked' && cardStatus('legacy-short') === 'blocked', 'human controls and nested wrappers');
+      if (document.querySelector('#nested .yt-lockup-view-model').dataset.noslopStatus) throw new Error('Nested lockup was processed twice');
+      for (const id of ['shortbad', 'shortgood']) {
+        if (document.querySelector('#' + id + ' [data-noslop-status]')) throw new Error('Nested Shorts were processed more than once');
+      }
+      return Object.fromEntries(['bad','human','native','camera','deep','channelid','verified','shortbad','shortgood','modern','nested'].map(id => [id, { status: cardStatus(id), visible: visible(id) }]));
+    })()`);
+    for (const id of ['bad', 'native', 'deep', 'channelid', 'verified', 'shortbad', 'modern','nested']) assert.deepEqual(initial[id], { status: 'blocked', visible: false }, id);
+    for (const id of ['human', 'camera', 'shortgood']) assert.deepEqual(initial[id], { status: 'clean', visible: true }, id);
+    assert.equal(await client.evaluate(`visible('shelf') && visible('shelf-wrapper') && visible('legacy-shelf')`), true, 'A blocked Short must not hide its shelf.');
+    console.log('PASS: desktop, modern lockups, Shorts, shelves, native labels, full descriptions and channel IDs.');
 
-  // Inject the same engine order used by manifest.json.
-  await client.send('Runtime.evaluate', { expression: normalizationCode });
-  await client.send('Runtime.evaluate', { expression: semanticCode });
-  await client.send('Runtime.evaluate', { expression: communityCode });
-  await client.send('Runtime.evaluate', { expression: scoringCode });
+    const dynamic = await client.evaluate(`(async () => {
+      const human = document.getElementById('human');
+      human.querySelector('#video-title').firstChild.nodeValue = 'A freshly AI-generated movie';
+      await waitFor(() => cardStatus('human') === 'blocked', 'text-only hydration');
+      human.querySelector('#video-title').textContent = 'My bicycle repair guide';
+      human.querySelector('#video-title').href = '/watch?v=humannew001';
+      await waitFor(() => cardStatus('human') === 'clean' && visible('human'), 'blocked node reused for a human video');
+      if (human.style.minHeight !== '70px' || human.style.margin !== '8px') throw new Error('Native card styles were lost');
+      const signature = human.dataset.noslopSig;
+      changeSettings({ stats: { newValue: { totalBlocked: 123 } } }, 'local');
+      await new Promise(resolve => setTimeout(resolve, 250));
+      if (human.dataset.noslopSig !== signature) throw new Error('Stats updates invalidated detection');
+      changeSettings({ enabled: { newValue: false } }, 'sync');
+      await waitFor(() => visible('bad'), 'disabled restores cards');
+      await new Promise(resolve => setTimeout(resolve, 250));
+      if (!visible('bad')) throw new Error('A stale request blocked while disabled');
+      changeSettings({ enabled: { newValue: true }, placeholderMode: { newValue: true } }, 'sync');
+      await waitFor(() => cardStatus('bad') === 'blocked' && document.getElementById('bad').previousElementSibling?.classList.contains('noslop-placeholder'), 'real placeholder');
+      document.getElementById('bad').previousElementSibling.querySelector('button').click();
+      if (!visible('bad') || cardStatus('bad') !== 'revealed') throw new Error('Real Show button failed');
+      const badLink = document.getElementById('bad').querySelector('#video-title');
+      badLink.href = '/watch?v=newbad00001'; badLink.textContent = 'A different AI-generated movie';
+      await waitFor(() => cardStatus('bad') === 'blocked', 'recycled revealed card must be checked');
+      changeSettings({ allowedChannels: { newValue: ['@fixture'] } }, 'sync');
+      await waitFor(() => visible('bad') && visible('native'), 'allow entry overrides every block signal');
+      changeSettings({ allowedChannels: { newValue: [] }, placeholderMode: { newValue: false } }, 'sync');
+      await waitFor(() => cardStatus('bad') === 'blocked', 'removing allow entry rechecks');
+      testMetadata.allow000001 = { videoId: 'allow000001', title: 'An AI-generated short film', channelId: 'UCabcdefghijklmnopqrstuv', channelName: 'Trusted ID' };
+      changeSettings({ allowedChannels: { newValue: ['@other', 'UCabcdefghijklmnopqrstuv'] } }, 'sync');
+      addCard('idallow', 'An AI-generated short film', { videoId: 'allow000001' });
+      await waitFor(() => cardStatus('idallow') === 'clean', 'resolved ID allow entry overrides title and community blocks');
+      changeSettings({ allowedChannels: { newValue: [] } }, 'sync');
+      await waitFor(() => cardStatus('idallow') === 'blocked', 'removing ID allow entry rechecks');
+      return true;
+    })()`);
+    assert.equal(dynamic, true);
+    console.log('PASS: hydration, recycled nodes, stats isolation, disable, real reveal and allow overrides.');
 
-  // Initialize Community with full 46k channel blocklist
-  await client.send('Runtime.evaluate', {
-    expression: `
-       window.NoSlopCommunity.init([], window.__testChannels, []);
-    `
-  });
-
-  // Inject Content Script Orchestrator
-  await client.send('Runtime.evaluate', { expression: contentCode });
-
-  // Wait 1.5 seconds for NoSlop evaluation on live feed
-  console.log('⏳ Waiting for NoSlop content script evaluation on live feed...');
-  await sleep(1500);
-
-  // 1. Get Live Performance Metrics from Chromium engine
-  const metricsResult = await client.send('Performance.getMetrics');
-  const metrics = {};
-  for (const m of metricsResult.metrics) {
-    metrics[m.name] = m.value;
+    const lazy = await client.evaluate(`(async () => {
+      const spacer = document.createElement('div'); spacer.style.height = '6000px'; document.querySelector('main').append(spacer);
+      const card = addCard('offscreen', 'A bicycle repair lesson');
+      card.scrollIntoView(); await waitFor(() => cardStatus('offscreen') === 'clean', 'first offscreen visit');
+      window.scrollTo(0, 0); await new Promise(resolve => setTimeout(resolve, 200));
+      card.querySelector('#video-title').textContent = 'AI-generated horror story';
+      card.querySelector('#video-title').href = '/watch?v=changed0001';
+      await new Promise(resolve => setTimeout(resolve, 250));
+      card.scrollIntoView(); await waitFor(() => cardStatus('offscreen') === 'blocked', 'offscreen recycled card observed again');
+      return true;
+    })()`);
+    assert.equal(lazy, true);
+    const metrics = await client.send('Performance.getMetrics');
+    const heap = metrics.metrics.find(metric => metric.name === 'JSHeapUsedSize').value / 1024 / 1024;
+    console.log(`PASS: lazy scrolling and re-observation. Fixture heap: ${heap.toFixed(2)} MB.`);
+    console.log('Chromium DOM regressions passed. Network and Chrome APIs were mocked; this is not a live-feed accuracy measurement.');
+    const nativeTargets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
+    const worker = nativeTargets.find(item => item.type === 'service_worker' && item.url.endsWith('/background/background.js'));
+    assert.ok(worker, 'The unpacked extension service worker must load.');
+    const workerClient = new CDPClient(worker.webSocketDebuggerUrl);
+    try {
+      await workerClient.connect();
+      assert.equal(await workerClient.evaluate('typeof getVideoMetadata'), 'function', 'Native service worker includes metadata lookup');
+    } finally { workerClient.close(); }
+    await client.send('Page.navigate', { url: worker.url.replace('/background/background.js', '/popup/popup.html') });
+    let popup;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      popup = await client.evaluate(`(() => { const brand = document.querySelector('.brand-name'); return brand ? { brand: brand.textContent, enabled: document.querySelector('#masterToggle').checked, entries: document.querySelector('#communityCountBadge').textContent } : null; })()`);
+      if (popup?.entries !== '0 Entries') break;
+      await pause(100);
+    }
+    assert.equal(popup?.brand, 'NoSlop 5.1');
+    assert.equal(popup?.enabled, true);
+    assert.ok(/46,884 Entries/.test(popup?.entries), 'Native popup loads bundled blocklist through Chrome storage');
+    if (process.argv.includes('--screenshot')) {
+      const shot = await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
+      const imagePath = path.join(os.tmpdir(), `noslop-popup-${Date.now()}.png`);
+      fs.writeFileSync(imagePath, Buffer.from(shot.data, 'base64'));
+      console.log(`Popup screenshot: ${imagePath}`);
+    }
+    console.log('PASS: native unpacked extension service worker, popup and Chrome storage.');
+  } finally {
+    client?.close(); browser?.kill(); server.close();
+    await pause(300);
+    const resolved = path.resolve(profile);
+    if (path.dirname(resolved) === path.resolve(os.tmpdir()) && path.basename(resolved).startsWith('noslop-cdp-')) {
+      try { fs.rmSync(resolved, { recursive: true, force: true }); } catch { /* The browser may still hold a temporary profile lock. */ }
+    }
   }
-
-  // 2. Evaluate DOM State inside the live page
-  const evalDom = await client.send('Runtime.evaluate', {
-    expression: `
-      (() => {
-        const allCards = document.querySelectorAll('ytd-video-renderer');
-        const blockedCards = document.querySelectorAll('ytd-video-renderer[data-noslop-status="blocked"], .noslop-hidden');
-        const cleanCards = document.querySelectorAll('ytd-video-renderer[data-noslop-status="clean"]');
-        const actionPills = document.querySelectorAll('.noslop-title-actions');
-        
-        const details = [];
-        allCards.forEach((c, idx) => {
-          if (idx < 8) {
-            const title = c.querySelector('#video-title')?.textContent?.trim() || '';
-            const status = c.dataset.noslopStatus || 'unprocessed';
-            const isHidden = c.classList.contains('noslop-hidden') || c.style.display === 'none';
-            details.push({ title: title.slice(0, 35) + '...', status, isHidden });
-          }
-        });
-
-        return {
-          totalCards: allCards.length,
-          blockedCount: blockedCards.length,
-          cleanCount: cleanCards.length,
-          actionPillsCount: actionPills.length,
-          sample: details
-        };
-      })()
-    `,
-    returnByValue: true
-  });
-
-  const domData = evalDom.result.value;
-
-  const settingsResult = await client.send('Runtime.evaluate', {
-    expression: `
-      (async () => {
-        const drama = [...document.querySelectorAll('ytd-video-renderer')]
-          .find(card => card.textContent.includes('Drama Diary'));
-        if (!drama || !window.__noslopSettingsChanged) return { success: false, reason: 'test hook unavailable' };
-        window.__noslopSettingsChanged({ enabled: { oldValue: true, newValue: false } }, 'sync');
-        await new Promise(resolve => setTimeout(resolve, 120));
-        const disabledVisible = drama.dataset.noslopStatus !== 'blocked' && getComputedStyle(drama).display !== 'none';
-        window.__noslopSettingsChanged({
-          enabled: { oldValue: false, newValue: true },
-          allowedChannels: { oldValue: [], newValue: ['Drama Diary'] }
-        }, 'sync');
-        await new Promise(resolve => setTimeout(resolve, 180));
-        const allowlisted = drama.dataset.noslopStatus !== 'blocked' && getComputedStyle(drama).display !== 'none';
-        return { success: disabledVisible && allowlisted, disabledVisible, allowlisted };
-      })()
-    `,
-    awaitPromise: true,
-    returnByValue: true
-  });
-  const settingsData = settingsResult.result.value;
-
-  console.log('\n' + '='.repeat(65));
-  console.log('  LIVE CHROMIUM DEVTOOLS PROTOCOL TEST RESULTS');
-  console.log('='.repeat(65));
-
-  console.log('\n📊 1. LIVE ENGINE METRICS:');
-  console.log(`   - JS Heap Used:       ${((metrics.JSHeapUsedSize || 0) / (1024 * 1024)).toFixed(2)} MB`);
-  console.log(`   - JS Heap Total:      ${((metrics.JSHeapTotalSize || 0) / (1024 * 1024)).toFixed(2)} MB`);
-  console.log(`   - JS Event Listeners: ${metrics.JSEventListeners || 0}`);
-  console.log(`   - Live DOM Nodes:     ${metrics.Nodes || 0}`);
-  console.log(`   - Script CPU Time:    ${((metrics.ScriptDuration || 0) * 1000).toFixed(2)} ms`);
-  console.log(`   - Layout CPU Time:    ${((metrics.LayoutDuration || 0) * 1000).toFixed(2)} ms`);
-  console.log(`   - Total Task CPU:     ${((metrics.TaskDuration || 0) * 1000).toFixed(2)} ms`);
-
-  const processedCount = domData.blockedCount + domData.cleanCount;
-  console.log('\n🎯 2. DOM FILTERING & BLOCKING ACCURACY (lazy viewport sample):');
-  console.log(`   - Total Cards Loaded:  ${domData.totalCards}`);
-  console.log(`   - Cards Evaluated:     ${processedCount}`);
-  console.log(`   - Total Slop Blocked:  ${domData.blockedCount}`);
-  console.log(`   - Clean Cards Kept:    ${domData.cleanCount}`);
-  console.log(`   - 1-Click Action Pills Injected: ${domData.actionPillsCount}`);
-  console.log(`   - Settings re-evaluation / allowlist: ${settingsData.success ? 'PASSED ✅' : 'FAILED ❌'}`);
-  if (!settingsData.success) throw new Error(`Settings assertion failed: ${JSON.stringify(settingsData)}`);
-
-  console.log('\n📋 3. FIRST 8 SAMPLE CARDS (Exact Match Verification):');
-  domData.sample.forEach((s, idx) => {
-    console.log(`   [${idx + 1}] Status: ${s.status.padEnd(8)} | Hidden: ${String(s.isHidden).padEnd(5)} | Title: ${s.title}`);
-  });
-
-  // 3. Test Scroll Performance
-  console.log('\n⚡ 4. SCROLL PERFORMANCE STRESS TEST (Simulating fast user scroll):');
-  const t0 = metrics.TaskDuration || 0;
-  for (let i = 0; i < 10; i++) {
-    await client.send('Runtime.evaluate', { expression: `window.scrollBy(0, 800);` });
-    await sleep(60);
-  }
-
-  await sleep(500);
-  const metricsAfterScroll = await client.send('Performance.getMetrics');
-  const postMetrics = {};
-  for (const m of metricsAfterScroll.metrics) postMetrics[m.name] = m.value;
-
-  const scrollCpuMs = ((postMetrics.TaskDuration - t0) * 1000);
-  console.log(`   - CPU Task Time across 10 rapid scrolls: ${scrollCpuMs.toFixed(2)} ms`);
-  console.log(`   - Heap change after rapid scrolling:     ${(((postMetrics.JSHeapUsedSize - metrics.JSHeapUsedSize)) / (1024 * 1024)).toFixed(3)} MB`);
-  console.log(`   - Average CPU overhead per scroll:       ${(scrollCpuMs / 10).toFixed(2)} ms`);
-
-  // 3. Test Placeholder Mode & Reveal Button Click
-  console.log('\n🎭 5. TESTING PLACEHOLDER MODE & "SHOW" REVEAL LIVE:');
-  const revealTest = await client.send('Runtime.evaluate', {
-    expression: `
-      (() => {
-        // Toggle placeholder mode on first blocked card
-        const card = document.querySelector('ytd-video-renderer[data-noslop-status="blocked"]');
-        if (!card) return { success: false, reason: 'No blocked card found' };
-
-        // Simulate placeholder insertion
-        const placeholder = document.createElement('div');
-        placeholder.className = 'noslop-placeholder';
-        placeholder.innerHTML = '<span class="noslop-placeholder-badge">AI Hidden</span><button type="button" class="noslop-reveal-btn">Show</button>';
-        card.parentNode.insertBefore(placeholder, card);
-
-        const btn = placeholder.querySelector('.noslop-reveal-btn');
-        btn.addEventListener('click', () => {
-          card.classList.remove('noslop-hidden', 'noslop-collapsed');
-          card.classList.add('noslop-revealed');
-          card.dataset.noslopStatus = 'revealed';
-          card.style.removeProperty('display');
-          card.style.removeProperty('visibility');
-          placeholder.remove();
-        });
-
-        // Click the reveal button
-        btn.click();
-
-        const isRevealed = card.dataset.noslopStatus === 'revealed';
-        const isHiddenRemoved = !card.classList.contains('noslop-hidden');
-        const computedDisplay = window.getComputedStyle(card).display;
-        const computedVisibility = window.getComputedStyle(card).visibility;
-
-        return {
-          success: isRevealed && isHiddenRemoved && computedDisplay !== 'none',
-          isRevealed,
-          isHiddenRemoved,
-          computedDisplay,
-          computedVisibility
-        };
-      })()
-    `,
-    returnByValue: true
-  });
-
-  const rev = revealTest.result.value;
-  console.log(`   - Placeholder Reveal Click Result: ${rev.success ? 'PASSED ✅' : 'FAILED ❌'}`);
-  console.log(`   - Status: ${rev.isRevealed ? 'revealed' : 'not revealed'}`);
-  console.log(`   - Computed Display Style: "${rev.computedDisplay}" (Must NOT be none)`);
-  console.log(`   - Computed Visibility:    "${rev.computedVisibility}"`);
-
-  console.log('\n' + '='.repeat(65));
-  console.log('✅ ACTUAL TESTING FINISHED SUCCESSFULLY WITH REAL CHROMIUM BROWSER.');
-  console.log('='.repeat(65));
-
-  client.close();
-  browser.kill();
-  server.close();
-  process.exit(0);
 }
+module.exports = { CDPClient, browserPath, pause, root };
+if (require.main === module) run().catch(error => { console.error(error); process.exitCode = 1; });

@@ -1,0 +1,52 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const sandbox = { window: {}, console };
+vm.createContext(sandbox);
+for (const name of ['textNormalization', 'trainingData', 'semanticEngine', 'communityEngine', 'audioScriptEngine']) {
+  vm.runInContext(fs.readFileSync(`content/engines/${name}.js`, 'utf8'), sandbox);
+}
+const model = sandbox.window.NoSlopSemantic;
+const community = sandbox.window.NoSlopCommunity;
+community.init();
+assert.ok(model.getModelStats().positiveCount > 40);
+assert.ok(model.getModelStats().negativeCount > 40);
+const probe = { title: 'Cerulean water clocks rotate clockwise beside copper umbrellas' };
+model.learnExamples([{ text: probe.title, label: 1 }]);
+assert.ok(model.predict(probe).score >= 0.5, 'A report must teach the local text model');
+const stats = JSON.stringify(model.getModelStats());
+model.learnExamples([{ text: probe.title, label: 1 }]);
+assert.equal(JSON.stringify(model.getModelStats()), stats, 'Replaying feedback must not double-count it');
+community.init([], ['@ChangedCommunityChannel'], [], ['@TrustedHuman']);
+assert.equal(JSON.stringify(model.getModelStats()), stats, 'Rule and corpus changes must retain local learning');
+assert.ok(model.predict(probe).score >= 0.5);
+model.setExamples([{ text: probe.title, label: 1 }, { text: probe.title, label: -1 }]);
+assert.equal(model.getModelStats().feedbackCount, 1, 'Newest correction wins');
+assert.equal(model.predict(probe).score, 0, 'A human correction invalidates cached positive predictions');
+model.setExamples([]);
+assert.equal(model.getModelStats().feedbackCount, 0, 'Deleting feedback must clear it across tabs');
+model.learnExamples([{ text: 'invalid', label: 0 }, null, { text: 'invalid', label: '1' }]);
+assert.equal(model.getModelStats().feedbackCount, 0, 'Ignore malformed feedback');
+model.setExamples(Array.from({ length: 2005 }, (_, index) => ({ text: `Example ${index}`, label: index % 2 ? 1 : -1 })));
+assert.equal(model.getModelStats().feedbackCount, 2000, 'Persisted feedback stays bounded');
+assert.ok(model.getModelStats().prototypes <= 512, 'Prediction cost stays bounded per label');
+model.setExamples([]);
+
+const id = 'UCabcdefghijklmnopqrstuv';
+community.init([], [id, '@caf%C3%A9', 'https://www.youtube.com/@exact-handle']);
+assert.ok(community.isChannelBlocked('', `/channel/${id}`).blocked);
+assert.equal(community.isChannelBlocked('', `/channel/${id.toUpperCase()}`).blocked, false, 'IDs remain case sensitive');
+assert.ok(community.isChannelBlocked('', '/@café').blocked, 'Decode UTF-8 handles');
+assert.ok(community.isChannelBlocked('', '/@caf%C3%A9/videos?view=0').blocked, 'Channel tabs retain their handle identity');
+assert.ok(community.isChannelBlocked('', '/@exact-handle').blocked, 'Accept full YouTube URLs in lists');
+assert.equal(community.isChannelBlocked('', '/@exact_handle').blocked, false, 'Distinct handles cannot collapse');
+community.init([id, '@caf%C3%A9'], [], [], ['https://www.youtube.com/@Trusted']);
+assert.ok(community.isUserChannelBlocked('', '/@café'));
+assert.ok(community.isChannelAllowed('', '/@trusted'));
+assert.equal(community.isUserChannelBlocked('', `/channel/${id.toUpperCase()}`), false);
+
+const audio = sandbox.window.NoSlopAudioScript;
+const rhythm = audio.analyzeScript('First sentence has several ordinary words. This is a much longer sentence with several extra words for a different rhythm! A short final sentence follows?');
+assert.equal(rhythm.evidence.sentenceCount, 3, 'Keep punctuation until sentence boundaries are measured');
+assert.equal(audio.analyzeScript('one ordinary sentence without punctuation '.repeat(5)).evidence.sentenceCount, 1);
+console.log('Learning persistence, bounded examples, channel identities and script statistics passed.');

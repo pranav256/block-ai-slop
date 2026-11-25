@@ -5,7 +5,7 @@
 **Use local metadata, community matches, and statistical scoring to hide low-effort generated content.**
 
 [![Manifest V3](https://img.shields.io/badge/Manifest-V3-blue.svg)](https://developer.chrome.com/docs/extensions/mv3/intro/)
-[![Version](https://img.shields.io/badge/version-5.0.0-rose.svg)](#)
+[![Version](https://img.shields.io/badge/version-5.1.0-rose.svg)](#)
 [![Training Corpus](https://img.shields.io/badge/statistical%20training-local-blueviolet.svg)](community-blocklist.json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/pranav256/block-ai-slop/pulls)
@@ -21,9 +21,9 @@
 
 > **Important Distinction:** Real human creators (such as Neil deGrasse Tyson on *StarTalk*, Steven Bartlett on *The Diary Of A CEO*, or Lex Fridman) frequently interview AI pioneers (like Geoffrey Hinton) and use AI-generated robots or backgrounds in their thumbnails.
 
-NoSlop combines native YouTube synthetic disclosures, exact community channel/video matches, generation hashtags and text, genre heuristics, and statistical text features. Verified channels receive automatic protection by default, except when a native synthetic disclosure is present. Personal block and allow entries take priority; an allow entry wins if both match.
+NoSlop combines native YouTube synthetic disclosures, exact community channel/video matches, contextual generation disclosures, genre heuristics, and a local nearest-example text model. Verified channels receive protection from weak automatic signals, while explicit production disclosures and exact blocklist matches still apply. Personal allow entries take priority over matching block rules.
 
-Thumbnail analysis is disabled by default. The text model uses hashed character n-grams and style features, and abstains when training or positive-versus-negative evidence is insufficient. These are heuristic scores, not guaranteed proof of AI authorship. See [the algorithm dossier](AUDIT_DOSSIER.md) for validation and remaining work.
+Thumbnail analysis is disabled by default. The text model uses hashed character n-grams, words, and word pairs with both slop and human examples, and abstains when positive-versus-negative evidence is insufficient. Undecided cards can be checked against public YouTube descriptions and channel IDs using bounded, cookie-free requests; classification stays local. These are heuristic scores, not proof of AI authorship or a 99% removal guarantee. See [the algorithm dossier](AUDIT_DOSSIER.md) for validation and limits.
 
 ---
 
@@ -36,24 +36,44 @@ flowchart TD
     Overrides -- Block --> Block[Hide card]
     Overrides -- Neither --> Native{Native synthetic disclosure enabled?}
     Native -- Yes --> Block
-    Native -- No --> Verified{Verified protection applies?}
-    Verified -- Yes --> Allow
-    Verified -- No --> Community{Enabled community match?}
+    Native -- No --> Community{Enabled community match?}
     Community -- Yes --> Block
     Community -- No --> Score[Genre heuristics and trained text score]
     Score --> Decision{Score >= threshold?}
     Decision -- Yes --> Block[Hide card]
-    Decision -- No --> Allow[Keep card]
+    Decision -- No --> Metadata[Bounded public metadata lookup]
+    Metadata --> Recheck[Recheck description and channel ID once]
+    Recheck --> Result{Sufficient evidence?}
+    Result -- Yes --> Block
+    Result -- No --> Allow
 ```
 
 ### Hybrid Scoring Engine *(Default ON)*
-Native disclosures, generation text/hashtags, and specific genre co-occurrences provide heuristic signals. When those do not already reach sensitivity, the trained text model can contribute character similarity and style evidence. The largest signal score is compared with the selected threshold.
+Production disclosures, generation tools/hashtags, and specific genre co-occurrences provide signals. Context checks distinguish tutorials, investigations, and negated disclosures. Independent channel/provenance evidence can reinforce a text signal; correlated text formulas share one vote. The nearest-example model contributes only when similar human examples do not explain the wording better.
 
 ### Community Blocklist and Model Seeds
-The community engine directly matches indexed channel names, handles, IDs, and video IDs. A bounded sample also seeds the text model. The list can be refreshed from GitHub; disabling community filtering leaves personal overrides active.
+The community engine directly matches indexed channel names, handles, IDs, and video IDs. Encoded handles are decoded and channel IDs retain their case. The text model uses 125 handwritten video-text seeds rather than channel handles; local reports teach it additional examples that survive rule changes. The list can be refreshed from GitHub; disabling community filtering leaves personal overrides active.
 
 ### Script Statistics
-The script analyzer contributes generic repetition, lexical diversity, sentence rhythm, and punctuation features. It contains no phrase dictionary.
+The script analyzer measures repetition, lexical diversity, and sentence rhythm. Repetition requires supporting text evidence before it can block a card; ordinary repeated song lyrics are not proof of generated content.
+
+### Public Metadata Lookup
+Undecided cards can lack the description or channel ID needed for a reliable match. NoSlop retrieves only public watch-page metadata from YouTube, without account cookies, and never downloads the video/audio stream. Two requests can run at once with a bounded queue and temporary cache. Errors and rate limits fall back to local filtering. See [privacy details](PRIVACY.md).
+
+### Checking the changes
+
+Reload the unpacked extension from this repository in your browser's extensions page, then refresh existing YouTube tabs. Existing sensitivity choices are preserved; **High** applies the strongest filtering.
+
+```powershell
+Get-ChildItem scripts/test-*.js | ForEach-Object { node $_.FullName; if ($LASTEXITCODE) { throw $_.Name } }
+node scripts/test-detector-quality.js --aggressive
+node scripts/cdp-benchmark.js
+node scripts/live-browser-test.js
+node --expose-gc scripts/benchmark-performance.js
+node scripts/build-extension-zip.js
+```
+
+The quality fixtures are handwritten regression cases, not a representative real-world accuracy benchmark. The Chromium fixture uses real DOM/observer behavior with mocked Chrome APIs and metadata responses. The live-browser test uses the native extension on real YouTube searches without mocks; it needs network access and exits with code 2 when YouTube is unavailable or presents a challenge. Set `NOSLOP_BROWSER` if Chromium is not at a standard installation path.
 
 ---
 
@@ -120,7 +140,7 @@ block-ai-slop/
 │   ├── content.css                     # Zero-gap hiding rules & unslop UI
 │   └── engines/
 │       ├── scoringEngine.js            # Engine 1: Heuristic and trained text scoring
-│       ├── semanticEngine.js           # Hashed character n-gram classifier
+│       ├── semanticEngine.js           # Bounded nearest-example video-text classifier
 │       ├── thumbnailEngine.js          # Engine 2: Canvas vision texture analyzer (Optional)
 │       ├── communityEngine.js          # Personal overrides and exact community indexes
 │       └── audioScriptEngine.js        # Engine 4: Generic script pattern analysis
@@ -146,7 +166,7 @@ block-ai-slop/
 ## 🛠️ Contributing
 
 Contributions are warmly welcomed!
-* Improve model quality by contributing representative labeled training data to [`community-blocklist.json`](community-blocklist.json).
+* Contribute reviewed channel identities to [`community-blocklist.json`](community-blocklist.json), and video-text training examples to `content/engines/trainingData.js`. Keep evaluation cases separate from training.
 * Open an issue using the [Report AI Slop Template](https://github.com/pranav256/block-ai-slop/issues/new?template=report-slop.yml).
 
 ---

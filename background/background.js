@@ -1,5 +1,5 @@
 /**
- * NoSlop - Background Service Worker (v5.0)
+ * NoSlop - Background Service Worker (v5.1)
  * Handles storage initialization, badge counters, and optional model training-data sync.
  */
 
@@ -8,13 +8,111 @@ const TRAINING_SYNC_ALARM = 'noslop-training-sync';
 const MAX_REMOTE_CHANNELS = 500000;
 const MAX_REMOTE_ENTRY_LENGTH = 300;
 const VERSION_RE = /^\d+\.\d+\.\d+$/;
+const VIDEO_ID_RE = /^[a-zA-Z0-9_-]{11}$/;
+const metadataCache = new Map();
+const pendingMetadata = new Map();
+const metadataQueue = [];
+let activeMetadataRequests = 0;
+let metadataBackoffUntil = 0;
+
+function parseVideoMetadata(html, videoId) {
+  const assignment = /(?:\bytInitialPlayerResponse\s*=|window\["ytInitialPlayerResponse"\]\s*=)\s*/g.exec(html);
+  if (!assignment || html[assignment.index + assignment[0].length] !== '{') return null;
+  const start = assignment.index + assignment[0].length;
+  let depth = 0, quoted = false, escaped = false;
+  for (let index = start; index < html.length; index++) {
+    const char = html[index];
+    if (quoted) {
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === '"') quoted = false;
+    } else if (char === '"') quoted = true;
+    else if (char === '{') depth++;
+    else if (char === '}' && --depth === 0) {
+      try {
+        const player = JSON.parse(html.slice(start, index + 1));
+        const details = player.videoDetails;
+        if (player.playabilityStatus?.status !== 'OK' || details?.videoId !== videoId) return null;
+        return {
+          videoId,
+          title: typeof details.title === 'string' ? details.title.slice(0, 512) : '',
+          channelName: typeof details.author === 'string' ? details.author.slice(0, 200) : '',
+          channelId: /^UC[a-zA-Z0-9_-]{22}$/.test(details.channelId || '') ? details.channelId : '',
+          description: typeof details.shortDescription === 'string' ? details.shortDescription.slice(0, 16000) : ''
+        };
+      } catch { return null; }
+    }
+  }
+  return null;
+}
+
+async function fetchVideoMetadata(videoId) {
+  if (Date.now() < metadataBackoffUntil) return null;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 6000);
+  try {
+    const response = await fetch(`https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}&hl=en`, {
+      credentials: 'omit', redirect: 'error', signal: controller.signal
+    });
+    if (response.status === 429 || response.status === 503) metadataBackoffUntil = Date.now() + 60000;
+    if (!response.ok || !response.body) return null;
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let html = '', bytes = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        bytes += value.byteLength;
+        if (bytes > 3000000) return null;
+        html += decoder.decode(value, { stream: true });
+        // Stop before downloading recommendations once the player's own JSON is complete.
+        if (html.includes('ytInitialPlayerResponse')) {
+          const metadata = parseVideoMetadata(html, videoId);
+          if (metadata) return metadata;
+        }
+      }
+      return parseVideoMetadata(html + decoder.decode(), videoId);
+    } finally { await reader.cancel().catch(() => {}); }
+  } catch { metadataBackoffUntil = Date.now() + 30000; return null; }
+  finally { clearTimeout(timeout); }
+}
+
+function drainMetadataQueue() {
+  while (activeMetadataRequests < 2 && metadataQueue.length) {
+    const { videoId, resolve } = metadataQueue.shift();
+    activeMetadataRequests++;
+    fetchVideoMetadata(videoId).then(metadata => {
+      if (metadataCache.size >= 256) metadataCache.delete(metadataCache.keys().next().value);
+      metadataCache.set(videoId, { metadata, expires: Date.now() + (metadata ? 30 * 60000 : 60000) });
+      resolve(metadata);
+    }).catch(() => resolve(null)).finally(() => {
+      pendingMetadata.delete(videoId);
+      activeMetadataRequests--;
+      drainMetadataQueue();
+    });
+  }
+}
+
+function getVideoMetadata(videoId) {
+  if (typeof videoId !== 'string' || !VIDEO_ID_RE.test(videoId)) return Promise.resolve(null);
+  const cached = metadataCache.get(videoId);
+  if (cached?.expires > Date.now()) return Promise.resolve(cached.metadata);
+  if (Date.now() < metadataBackoffUntil) return Promise.resolve(null);
+  if (pendingMetadata.has(videoId)) return pendingMetadata.get(videoId);
+  if (metadataQueue.length >= 24) return Promise.resolve(null);
+  const result = new Promise(resolve => { metadataQueue.push({ videoId, resolve }); });
+  pendingMetadata.set(videoId, result);
+  drainMetadataQueue();
+  return result;
+}
 
 const DEFAULT_SETTINGS = {
   enabled: true,
   engineScoring: true,        // Engine 1
   sensitivity: "balanced",
   engineThumbnails: false,    // Engine 2: DISABLED by default (human creators use AI thumbnails)
-  engineCommunity: true,      // Enables community examples for model training
+  engineCommunity: true,      // Enables exact community channel/video matching
   engineAudioScript: true,
   blockShorts: false,         // FALSE by default: only AI slop shorts are blocked, human shorts stay
   placeholderMode: false,     // Clean AdBlock style (default)
@@ -35,10 +133,11 @@ async function ensureLocalTrainingData() {
         if (json) {
           await chrome.storage.local.set({
             remoteChannels: json.channels,
+            remoteVideos: json.videos,
             communityVersion: json.version,
             lastCommunitySync: json.updatedAt
           });
-           console.log(`[NoSlop Background] Loaded ${json.channels.length} model training examples.`);
+           console.log(`[NoSlop Background] Loaded ${json.channels.length} community entries.`);
         }
       }
     }
@@ -57,11 +156,14 @@ function validateBlocklist(data) {
   const channels = Array.from(new Set(data.channels.filter(item =>
     typeof item === 'string' && item.trim() && item.length <= MAX_REMOTE_ENTRY_LENGTH
   ).map(item => item.trim())));
+  if (data.videos !== undefined && (!Array.isArray(data.videos) || data.videos.length > 100000)) return null;
+  const videos = Array.from(new Set((data.videos || []).filter(item => typeof item === 'string' && VIDEO_ID_RE.test(item))));
   const updatedAt = new Date(data.updatedAt);
   if (channels.length === 0 || !Number.isFinite(updatedAt.getTime()) ||
       (data.channelsCount !== undefined && data.channelsCount !== channels.length)) return null;
   return {
     channels,
+    videos,
     version: data.version,
     updatedAt: updatedAt.toISOString()
   };
@@ -127,6 +229,7 @@ async function syncTrainingData() {
     if (data && (!stored.communityVersion || compareVersions(data.version, stored.communityVersion) >= 0)) {
       await chrome.storage.local.set({
         remoteChannels: data.channels,
+        remoteVideos: data.videos,
         communityVersion: data.version,
         lastCommunitySync: data.updatedAt
       });
@@ -183,6 +286,10 @@ function setTabCount(tabId, count) {
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'getVideoMetadata') {
+    getVideoMetadata(message.videoId).then(sendResponse);
+    return true;
+  }
   if (message.action === 'videoBlocked' && sender.tab?.id) {
     const tabId = sender.tab.id;
     const increment = Number.isFinite(message.count) ? Math.max(1, Math.floor(message.count)) : 1;

@@ -29,7 +29,7 @@
     }
     const repeatedTrigrams = Array.from(trigrams.values()).filter(count => count > 1).length;
     const repetition = repeatedTrigrams / Math.max(1, trigrams.size);
-    const sentences = normalized.split(/[.!?]+/).map(sentence => sentence.trim()).filter(Boolean);
+    const sentences = String(text || '').split(/[.!?。！？]+/u).map(normalize).filter(Boolean);
     const sentenceLengths = sentences.map(sentence => sentence.split(' ').length);
     const mean = sentenceLengths.length
       ? sentenceLengths.reduce((sum, value) => sum + value, 0) / sentenceLengths.length
@@ -37,7 +37,7 @@
     const variance = sentenceLengths.length
       ? sentenceLengths.reduce((sum, value) => sum + (value - mean) ** 2, 0) / sentenceLengths.length
       : 0;
-    const rhythmRegularity = mean ? Math.max(0, 1 - Math.sqrt(variance) / mean) : 0;
+    const rhythmRegularity = mean && sentences.length >= 3 ? Math.max(0, 1 - Math.sqrt(variance) / mean) : 0;
     const score = Math.min(0.70,
       Math.max(0, 1 - lexicalDiversity) * 0.35 +
       repetition * 0.35 +

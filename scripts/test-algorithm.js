@@ -18,7 +18,7 @@ const probe = { title: examples[0], channelName: 'Science Classroom' };
 model.initialize(examples, ['cooking lessons']);
 const forward = model.predict(probe).evidence.positiveSimilarity;
 model.initialize([...examples].reverse(), ['cooking lessons']);
-assert.equal(model.predict(probe).evidence.positiveSimilarity, forward, 'Centroids must not depend on training order');
+assert.equal(model.predict(probe).evidence.positiveSimilarity, forward, 'Nearest-example evidence must not depend on training order');
 
 model.initialize(['aaaaa', 'bbbbb', 'ccccc'], ['cooking lessons']);
 const before = model.predict({ title: 'bbbbb' }).evidence.positiveSimilarity;
@@ -88,7 +88,7 @@ const card = {
     if (selector.includes('#video-title')) return titleNode;
     if (selector.includes('ytd-channel-name')) return channelNode;
     if (selector.includes('Verified')) return {};
-    if (selector.includes('How this content was made')) return {};
+    if (selector.includes('Altered or synthetic')) return {};
     return null;
   },
   querySelectorAll: () => [],
@@ -108,13 +108,15 @@ assert.notEqual(metadataSignature({ ...meta, snippet: `${snippetPrefix}human lec
 (async () => {
   community.init([], ['Science Classroom'], [], []);
   const clean = { title: 'A science lecture', channelName: 'Science Classroom', channelHref: '/@classroom', isVerified: true };
-  assert.equal((await evaluateVideo(clean)).isBlocked, false, 'Verification protects against automatic community matches');
+  assert.equal((await evaluateVideo(clean)).isBlocked, true, 'Verification must not exempt an exact community match');
+  community.init([], [], [], []);
+  assert.equal((await evaluateVideo(clean)).isBlocked, false, 'Verification protects an otherwise clean creator');
   assert.equal((await evaluateVideo({ ...clean, hasAiInfoButton: true })).isBlocked, true, 'A native synthetic disclosure takes priority over verification');
   settings.blockSyntheticDisclosures = false;
   assert.equal((await evaluateVideo({ ...clean, hasAiInfoButton: true })).isBlocked, false, 'Respect the native-disclosure toggle');
   settings.blockSyntheticDisclosures = true;
   settings.whitelistVerified = false;
-  assert.equal((await evaluateVideo(clean)).isBlocked, true, 'Respect the verified-protection toggle');
+  assert.equal((await evaluateVideo({ ...clean, title: 'NASA detected a terrifying secret signal' })).isBlocked, true, 'Respect the verified-protection toggle');
   settings.whitelistVerified = true;
 
   community.init(['@classroom'], [], [], []);

@@ -1,18 +1,15 @@
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 
 const rootDir = path.join(__dirname, '..');
 const distDir = path.join(rootDir, 'dist');
-const stageDir = path.join(distDir, 'stage');
 
 console.log('🚀 Building production ZIP for Chrome Web Store...');
 
 // 1. Create dist and stage directories
-if (fs.existsSync(distDir)) {
-  fs.rmSync(distDir, { recursive: true, force: true });
-}
-fs.mkdirSync(stageDir, { recursive: true });
+fs.mkdirSync(distDir, { recursive: true });
+const stageDir = fs.mkdtempSync(path.join(distDir, 'stage-'));
 
 // 2. Validate manifest.json
 const manifestPath = path.join(rootDir, 'manifest.json');
@@ -77,10 +74,13 @@ const zipName = `noslop-v${manifest.version}-chrome-web-store.zip`;
 const zipPath = path.join(distDir, zipName);
 
 console.log(`\n📦 Compressing into ${zipName}...`);
-const psCmd = `powershell -NoProfile -Command "Compress-Archive -Path '${stageDir}\\*' -DestinationPath '${zipPath}' -Force"`;
-execSync(psCmd);
+const quote = value => `'${value.replace(/'/g, "''")}'`;
+execFileSync('powershell.exe', ['-NoProfile', '-Command', `Compress-Archive -Path ${quote(path.join(stageDir, '*'))} -DestinationPath ${quote(zipPath)} -Force`], { windowsHide: true });
 
 // Clean up staging directory
+if (path.dirname(path.resolve(stageDir)) !== path.resolve(distDir) || !path.basename(stageDir).startsWith('stage-')) {
+  throw new Error('Refusing to remove a staging directory outside dist.');
+}
 fs.rmSync(stageDir, { recursive: true, force: true });
 
 const stats = fs.statSync(zipPath);

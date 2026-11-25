@@ -1,5 +1,5 @@
 /**
- * NoSlop - Content Script (Orchestrator v5.0)
+ * NoSlop - Content Script (Orchestrator v5.1)
  * Ultra-low CPU/RAM via IntersectionObserver lazy viewport evaluation.
  * Clean, non-intrusive action buttons near video titles.
  * Frictionless 1-click slop reporting with zero watch-page playback disruption.
@@ -9,7 +9,7 @@
 (() => {
   'use strict';
 
-  console.log('%c[NoSlop 5.0]%c Active with Lazy Viewport Evaluation & Creator Safety.', 'color: #f43f5e; font-weight: bold', 'color: #94a3b8');
+  console.log('%c[NoSlop 5.1]%c Active with Lazy Viewport Evaluation & Creator Safety.', 'color: #f43f5e; font-weight: bold', 'color: #94a3b8');
 
   const SENSITIVITY_THRESHOLDS = {
     aggressive: 0.35,
@@ -24,8 +24,6 @@
     'ytd-grid-video-renderer',
     'ytd-playlist-renderer',
     'ytd-playlist-video-renderer',
-    'ytd-shelf-renderer',
-    'ytd-reel-shelf-renderer',
     'ytd-reel-item-renderer',
     'ytd-reel-video-renderer',
     'ytd-radio-renderer',
@@ -38,30 +36,16 @@
     'ytm-reel-item-renderer',
     'ytm-shorts-lockup-view-model',
     'ytm-shorts-lockup-view-model-v2',
-    'yt-lockup-view-model'
+    'yt-lockup-view-model',
+    '.yt-lockup-view-model',
+    'yt-shorts-lockup-view-model',
+    '.ytShortsLockupViewModelHost',
+    '.ytGridShelfViewModelGridShelfItem'
   ];
   const CARD_SELECTOR_TEXT = CARD_SELECTORS.join(', ');
+  const CARD_WRAPPER_SELECTOR = 'ytd-rich-item-renderer, ytm-rich-item-renderer, yt-lockup-view-model, .yt-lockup-view-model, ytm-shorts-lockup-view-model, ytm-shorts-lockup-view-model-v2, yt-shorts-lockup-view-model, .ytShortsLockupViewModelHost, .ytGridShelfViewModelGridShelfItem';
 
-  const ROOT_CONTAINER_SELECTORS = [
-    'ytd-rich-item-renderer',
-    'ytd-video-renderer',
-    'ytd-compact-video-renderer',
-    'ytd-grid-video-renderer',
-    'ytd-playlist-renderer',
-    'ytd-shelf-renderer',
-    'ytd-reel-shelf-renderer',
-    'ytd-radio-renderer',
-    'ytd-movie-renderer',
-    'ytd-channel-renderer',
-    'ytd-notification-renderer',
-    'ytm-rich-item-renderer',
-    'ytm-video-with-context-renderer',
-    'ytm-compact-video-renderer',
-    'ytm-reel-item-renderer',
-    'ytm-shorts-lockup-view-model',
-    'ytm-shorts-lockup-view-model-v2'
-  ];
-  const ROOT_CONTAINER_SELECTOR_TEXT = ROOT_CONTAINER_SELECTORS.join(', ');
+  const SHELF_SELECTOR = 'ytd-rich-shelf-renderer, ytd-reel-shelf-renderer, ytm-reel-shelf-renderer, grid-shelf-view-model';
 
   let settings = {
     enabled: true,
@@ -83,7 +67,18 @@
   let evaluationGeneration = 0;
   const processingCards = new WeakSet();
   const hydrationRetryCounts = new WeakMap();
+  const originalCardStyles = new WeakMap();
+  const BLOCK_STYLE_PROPERTIES = ['display', 'height', 'min-height', 'margin', 'padding', 'overflow'];
   let tabCountSyncTimeout = null;
+
+  function initializeEngines() {
+    window.NoSlopCommunity?.init(
+      settings.blockedChannels,
+      settings.engineCommunity !== false ? settings.remoteChannels : [],
+      settings.remoteVideos || [],
+      settings.allowedChannels
+    );
+  }
 
   function syncTabCount() {
     tabCountSyncTimeout = null;
@@ -119,15 +114,8 @@
         if (localData?.remoteVideos) {
           settings.remoteVideos = localData.remoteVideos;
         }
-        if (window.NoSlopCommunity) {
-          window.NoSlopCommunity.init(
-            settings.blockedChannels,
-            settings.engineCommunity !== false ? settings.remoteChannels : [],
-            settings.remoteVideos || [],
-            settings.allowedChannels
-          );
-        }
-        window.NoSlopSemantic?.learnExamples?.(localData?.learningExamples || []);
+        initializeEngines();
+        window.NoSlopSemantic?.setExamples?.(localData?.learningExamples || []);
 
         resetAllCards({ preserveRevealed: true });
         scanFeed();
@@ -137,6 +125,7 @@
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'sync') {
+      if (!Object.keys(changes).some(key => key in settings)) return;
       let masterToggledOff = false;
       for (const [key, change] of Object.entries(changes)) {
         settings[key] = change.newValue;
@@ -144,14 +133,7 @@
           masterToggledOff = true;
         }
       }
-      if (window.NoSlopCommunity) {
-        window.NoSlopCommunity.init(
-          settings.blockedChannels,
-          settings.engineCommunity !== false ? settings.remoteChannels : [],
-          settings.remoteVideos || [],
-          settings.allowedChannels
-        );
-      }
+      initializeEngines();
 
       if (masterToggledOff) {
         resetAllCards();
@@ -162,17 +144,13 @@
         scanFeed();
       }
     } else if (area === 'local') {
+      if (!changes.remoteChannels && !changes.remoteVideos && !changes.learningExamples) return;
       if (changes.remoteChannels) {
         settings.remoteChannels = changes.remoteChannels.newValue || [];
       }
-      if (window.NoSlopCommunity) {
-        window.NoSlopCommunity.init(
-          settings.blockedChannels,
-          settings.engineCommunity !== false ? settings.remoteChannels : [],
-          settings.remoteVideos || [],
-          settings.allowedChannels
-        );
-      }
+      if (changes.remoteVideos) settings.remoteVideos = changes.remoteVideos.newValue || [];
+      initializeEngines();
+      if (changes.learningExamples) window.NoSlopSemantic?.setExamples?.(changes.learningExamples.newValue || []);
       resetAllCards({ preserveRevealed: true });
       scanFeed();
     }
@@ -185,16 +163,11 @@
 
   function clearCardVisualState(rootCard) {
     rootCard.classList.remove('noslop-hidden', 'noslop-revealed', 'noslop-collapsed');
-    rootCard.style.removeProperty('display');
-    rootCard.style.removeProperty('visibility');
-    rootCard.style.removeProperty('height');
-    rootCard.style.removeProperty('min-height');
-    rootCard.style.removeProperty('max-height');
-    rootCard.style.removeProperty('margin');
-    rootCard.style.removeProperty('padding');
-    rootCard.style.removeProperty('overflow');
-    rootCard.style.removeProperty('opacity');
-    rootCard.style.removeProperty('pointer-events');
+    for (const [property, value, priority] of originalCardStyles.get(rootCard) || []) {
+      if (value) rootCard.style.setProperty(property, value, priority);
+      else rootCard.style.removeProperty(property);
+    }
+    originalCardStyles.delete(rootCard);
     cardPlaceholder(rootCard)?.remove();
   }
 
@@ -209,6 +182,7 @@
       el.removeAttribute('data-noslop-status');
       el.removeAttribute('data-noslop-reason');
       el.removeAttribute('data-noslop-observed');
+      el.removeAttribute('data-noslop-revealed-video');
       clearCardVisualState(el);
       hydrationRetryCounts.delete(el);
     });
@@ -221,14 +195,20 @@
   }
 
   function findRootCard(el) {
-    const outer = el.parentElement?.closest(ROOT_CONTAINER_SELECTOR_TEXT);
-    if (outer) return outer;
-    return el.closest(CARD_SELECTOR_TEXT) || el;
+    let card = el.closest(CARD_SELECTOR_TEXT) || el;
+    if (card.matches('ytd-rich-item-renderer, ytm-rich-item-renderer') && card.querySelector(SHELF_SELECTOR)) return null;
+    let outer = card.parentElement?.closest(CARD_WRAPPER_SELECTOR);
+    while (outer && !outer.querySelector(SHELF_SELECTOR)) {
+      card = outer;
+      outer = card.parentElement?.closest(CARD_WRAPPER_SELECTOR);
+    }
+    return card;
   }
 
   function metadataSignature(meta) {
     return JSON.stringify([meta.videoId, meta.title, meta.fullUntruncatedTitle, meta.channelName,
-      meta.channelHref, meta.snippet, meta.badgeText, meta.cardText, meta.isVerified, meta.hasAiInfoButton, meta.isShort]);
+      meta.channelHref, meta.snippet, meta.badgeText, meta.isVerified, meta.hasAiInfoButton, meta.isShort,
+      meta.thumbnailImg?.currentSrc || meta.thumbnailImg?.src]);
   }
 
   function extractMetadata(rootCard) {
@@ -236,7 +216,7 @@
     let fullUntruncatedTitle = '';
 
     const titleEl = rootCard.querySelector(
-      '#video-title, #video-title-link, a.yt-lockup-metadata-view-model-wiz__title, h3 a, h3, .yt-core-attributed-string, ytd-reel-player-header-renderer #title, #overlay h2'
+      '#video-title, #video-title-link, a.yt-lockup-metadata-view-model-wiz__title, a.yt-lockup-metadata-view-model__title, .ytShortsLockupViewModelHostMetadataTitle, h3 a, h3, ytd-reel-player-header-renderer #title, #overlay h2, .yt-core-attributed-string'
     );
 
     if (titleEl) {
@@ -247,13 +227,13 @@
         fullUntruncatedTitle = attrTitle;
       }
       const attrAria = titleEl.getAttribute('aria-label');
-      if (attrAria) {
+      if (attrAria && !titleCandidates.length) {
         titleCandidates.push(attrAria);
         if (!fullUntruncatedTitle) fullUntruncatedTitle = attrAria;
       }
     }
 
-    const watchLink = rootCard.querySelector('a[href*="/watch?v="], a[href^="/shorts/"]');
+    const watchLink = rootCard.querySelector('a[href*="/watch?v="], a[href*="/shorts/"]');
     let videoId = '';
     if (watchLink) {
       const linkTitle = watchLink.getAttribute('title');
@@ -262,22 +242,22 @@
         if (!fullUntruncatedTitle) fullUntruncatedTitle = linkTitle;
       }
       const linkAria = watchLink.getAttribute('aria-label');
-      if (linkAria) {
+      if (linkAria && !titleCandidates.length) {
         titleCandidates.push(linkAria);
         if (!fullUntruncatedTitle) fullUntruncatedTitle = linkAria;
       }
       const href = watchLink.getAttribute('href') || '';
       const watchMatch = href.match(/[?&]v=([^&]+)/);
-      const shortsMatch = href.match(/^\/shorts\/([^/?]+)/);
+      const shortsMatch = href.match(/\/shorts\/([^/?#]+)/);
       if (watchMatch) videoId = watchMatch[1];
       else if (shortsMatch) videoId = shortsMatch[1];
     }
 
-    const title = [...new Set(titleCandidates.map(value => value.replace(/\s+/g, ' ').trim()))].join(' ');
+    const title = (fullUntruncatedTitle || titleCandidates[0] || '').replace(/\s+/g, ' ').trim();
 
     // 2. Channel Name
     const channelEl = rootCard.querySelector(
-      'ytd-channel-name, #channel-name, #text.ytd-channel-name, a.yt-simple-endpoint[href*="/@"], a.yt-simple-endpoint[href*="/channel/"], .yt-lockup-metadata-view-model-wiz__metadata a, #byline-container a, #channel-info, ytd-reel-player-header-renderer a'
+      'ytd-channel-name, #channel-name, #text.ytd-channel-name, .yt-lockup-metadata-view-model-wiz__metadata a, .yt-lockup-metadata-view-model__metadata a, #byline-container a, #channel-info, ytd-reel-player-header-renderer a, a[href*="/@"], a[href*="/channel/"]'
     );
     const channelLink = channelEl?.matches?.('a[href*="/@"], a[href*="/channel/"]')
       ? channelEl
@@ -296,18 +276,18 @@
 
     // 4. Badges
     const badgeText = Array.from(rootCard.querySelectorAll(
-      'ytd-badge-supported-renderer, yt-badge-view-model, .badge-shape'
+      'ytd-badge-supported-renderer, yt-badge-view-model, .ytBadgeViewModelHost, .badge-shape'
     )).map(b => b.textContent).join(' ');
 
     const cardText = (rootCard.textContent || '').replace(/\s+/g, ' ').trim();
     const hasAiInfoButton = Boolean(rootCard.querySelector(
-      'button[aria-label*="How this content was made" i], button[aria-label*="Altered or synthetic" i]'
-    ));
+      'button[aria-label="AI content" i], button[aria-label*="AI-generated" i], button[aria-label*="Altered or synthetic" i], [role="button"][aria-label="AI content" i], yt-badge-view-model[aria-label*="AI-generated" i], .ytBadgeViewModelHost[aria-label*="AI-generated" i]'
+    )) || /(?:^|\s)(?:AI content|AI-generated|Altered or synthetic content)(?:$|\s)/i.test(badgeText);
 
     const isShort = Boolean(
-      rootCard.matches('ytd-reel-item-renderer, ytm-shorts-lockup-view-model-v2') ||
+      rootCard.matches('ytd-reel-item-renderer, ytd-reel-video-renderer, ytm-reel-item-renderer, ytm-shorts-lockup-view-model, ytm-shorts-lockup-view-model-v2, yt-shorts-lockup-view-model, .ytShortsLockupViewModelHost') ||
       rootCard.closest('ytd-reel-shelf-renderer, ytd-rich-shelf-renderer[is-shorts]') ||
-      rootCard.querySelector('a[href^="/shorts/"]')
+      rootCard.querySelector('a[href*="/shorts/"]')
     );
 
     const thumbnailImg = rootCard.querySelector('#thumbnail img, ytd-thumbnail img, yt-image img');
@@ -318,6 +298,7 @@
       videoId,
       channelName,
       channelHref,
+      channelId: channelHref.match(/\/channel\/(UC[a-zA-Z0-9_-]{22})(?:[/?#]|$)/)?.[1] || '',
       isVerified,
       snippet,
       scriptText: snippet,
@@ -329,24 +310,59 @@
     };
   }
 
-  async function evaluateVideo(meta) {
+  function requestVideoMetadata(videoId) {
+    return new Promise(resolve => {
+      try {
+        chrome.runtime.sendMessage({ action: 'getVideoMetadata', videoId }, result => {
+          if (chrome.runtime.lastError) resolve(null);
+          else resolve(result);
+        });
+      } catch { resolve(null); }
+    });
+  }
+
+  async function enrichVideoMetadata(meta) {
+    if (!/^[a-zA-Z0-9_-]{11}$/.test(meta.videoId || '')) return null;
+    const metadata = await requestVideoMetadata(meta.videoId);
+    if (metadata?.videoId !== meta.videoId) return null;
+    return {
+      ...meta,
+      title: metadata.title || meta.title,
+      fullUntruncatedTitle: metadata.title || meta.fullUntruncatedTitle,
+      channelName: metadata.channelName || meta.channelName,
+      channelId: metadata.channelId,
+      snippet: metadata.description || meta.snippet,
+      scriptText: metadata.description || meta.scriptText
+    };
+  }
+
+  async function evaluateVideo(meta, { enrich = true } = {}) {
+    if (!settings.enabled) return { isBlocked: false, score: 0, reason: 'Disabled' };
     const baseThreshold = SENSITIVITY_THRESHOLDS[settings.sensitivity] || 0.50;
     const threshold = (meta.isShort && settings.blockShorts)
       ? Math.min(baseThreshold, 0.40)
       : baseThreshold;
+    let textScore = 0;
 
-    if (window.NoSlopCommunity?.isChannelAllowed?.(meta.channelName, meta.channelHref)) {
+    const channelIdHref = meta.channelId ? `/channel/${meta.channelId}` : '';
+    if (window.NoSlopCommunity?.isChannelAllowed?.(meta.channelName, meta.channelHref) ||
+        (channelIdHref && window.NoSlopCommunity?.isChannelAllowed?.('', channelIdHref))) {
       return { isBlocked: false, score: 0.0, reason: 'User Allowlist' };
     }
 
-    if (window.NoSlopCommunity?.isUserChannelBlocked?.(meta.channelName, meta.channelHref)) {
+    const hasIdAllowEntry = (Array.isArray(settings.allowedChannels) ? settings.allowedChannels : []).some(value =>
+      typeof value === 'string' && /(?:^|\/channel\/)UC[a-zA-Z0-9_-]{22}(?:[/?#]|$)/.test(value));
+    if (enrich && !channelIdHref && hasIdAllowEntry) {
+      const enriched = await enrichVideoMetadata(meta);
+      if (enriched) return evaluateVideo(enriched, { enrich: false });
+      enrich = false;
+    }
+    if (window.NoSlopCommunity?.isUserChannelBlocked?.(meta.channelName, meta.channelHref) ||
+        (channelIdHref && window.NoSlopCommunity?.isUserChannelBlocked?.('', channelIdHref))) {
       return { isBlocked: true, score: 1.0, reason: 'User Blacklist' };
     }
     if (settings.engineScoring !== false && settings.blockSyntheticDisclosures !== false && meta.hasAiInfoButton) {
       return { isBlocked: true, score: 1.0, reason: 'YouTube synthetic-media disclosure' };
-    }
-    if (settings.whitelistVerified !== false && meta.isVerified) {
-      return { isBlocked: false, score: 0.0, reason: 'Verified creator protected' };
     }
 
     // 1. Engine 3: Community & Curated Blocklist Consensus (Exact indexed lookup)
@@ -358,6 +374,9 @@
       const commCheck = window.NoSlopCommunity.isChannelBlocked(meta.channelName, meta.channelHref);
       if (commCheck?.blocked) {
         return { isBlocked: true, score: 1.0, reason: commCheck.source || 'Community Blocklist' };
+      }
+      if (channelIdHref && window.NoSlopCommunity.isChannelBlocked('', channelIdHref).blocked) {
+        return { isBlocked: true, score: 1, reason: 'Community Blocklist ID' };
       }
     }
 
@@ -373,6 +392,7 @@
           whitelistVerified: settings.whitelistVerified !== false,
           blockSyntheticDisclosures: settings.blockSyntheticDisclosures !== false
         });
+        textScore = scoringResult?.score || 0;
 
         // If AI Shorts filter is toggled, enforce stricter sensitivity (0.40) on shorts, but NEVER blanket block clean human videos
         if (scoringResult && scoringResult.score >= threshold) {
@@ -385,12 +405,14 @@
       }
     }
 
+    const protectedCreator = settings.whitelistVerified !== false && meta.isVerified;
+
     // Generic script-pattern analysis. The analyzer is
     // intentionally metadata-only here; opening an AudioContext for every
     // feed card would interfere with playback and waste significant CPU.
-    if (settings.engineAudioScript !== false && window.NoSlopAudioScript?.analyzeScript) {
+    if (!protectedCreator && settings.engineAudioScript !== false && window.NoSlopAudioScript?.analyzeScript) {
       const scriptResult = window.NoSlopAudioScript.analyzeScript(meta.scriptText || '');
-      if (scriptResult?.score >= threshold) {
+      if (textScore >= 0.25 && scriptResult?.score >= Math.max(threshold, 0.65)) {
         return {
           isBlocked: true,
           score: scriptResult.score,
@@ -400,7 +422,7 @@
     }
 
     // 4. Engine 2: Thumbnail Vision Texture Scanner (Disabled by default to protect human creators)
-    if (settings.engineThumbnails && window.NoSlopVision && meta.thumbnailImg) {
+    if (!protectedCreator && settings.engineThumbnails && window.NoSlopVision && meta.thumbnailImg) {
       const visionResult = await window.NoSlopVision.scanThumbnail(meta.thumbnailImg);
       if (visionResult?.score >= Math.max(threshold, 0.70)) {
         return {
@@ -411,7 +433,13 @@
       }
     }
 
-    return { isBlocked: false, score: 0.0, reason: 'Clean' };
+    if (enrich && /^[a-zA-Z0-9_-]{11}$/.test(meta.videoId || '') &&
+        (settings.engineScoring !== false || settings.engineCommunity !== false)) {
+      const enriched = await enrichVideoMetadata(meta);
+      if (enriched) return evaluateVideo(enriched, { enrich: false });
+    }
+
+    return { isBlocked: false, score: 0.0, reason: protectedCreator ? 'Verified creator protected' : 'Clean' };
   }
 
   function applyBlock(rootCard, meta, reason = 'AI Content') {
@@ -421,6 +449,10 @@
 
     rootCard.dataset.noslopStatus = 'blocked';
     rootCard.dataset.noslopReason = reason;
+    if (!originalCardStyles.has(rootCard)) {
+      originalCardStyles.set(rootCard, BLOCK_STYLE_PROPERTIES.map(property =>
+        [property, rootCard.style.getPropertyValue(property), rootCard.style.getPropertyPriority(property)]));
+    }
 
     if (settings.placeholderMode) {
       rootCard.classList.add('noslop-hidden');
@@ -454,20 +486,10 @@
         revealBtn.addEventListener('click', (e) => {
           e.stopPropagation();
           e.preventDefault();
-          rootCard.classList.remove('noslop-hidden', 'noslop-collapsed');
+          clearCardVisualState(rootCard);
           rootCard.classList.add('noslop-revealed');
           rootCard.dataset.noslopStatus = 'revealed';
-          rootCard.style.removeProperty('display');
-          rootCard.style.removeProperty('visibility');
-          rootCard.style.removeProperty('height');
-          rootCard.style.removeProperty('min-height');
-          rootCard.style.removeProperty('max-height');
-          rootCard.style.removeProperty('margin');
-          rootCard.style.removeProperty('padding');
-          rootCard.style.removeProperty('overflow');
-          rootCard.style.removeProperty('opacity');
-          rootCard.style.removeProperty('pointer-events');
-          placeholder.remove();
+          rootCard.dataset.noslopRevealedVideo = meta.videoId || meta.title;
           scheduleTabCountSync();
         });
 
@@ -534,7 +556,7 @@
       applyBlock(rootCard, freshMeta, 'User Reported AI Slop');
 
       if (chName && chName !== 'Reported Channel') {
-        addChannelToBlocklist(chName);
+        addChannelToBlocklist(freshMeta.channelHref || chName);
       }
 
       // Auto-save to report queue
@@ -563,7 +585,6 @@
           });
           const bounded = examples.slice(-2000);
           chrome.storage.local.set({ learningExamples: bounded });
-          window.NoSlopSemantic?.learnExamples?.([bounded[bounded.length - 1]]);
         });
       });
 
@@ -596,9 +617,7 @@
         list.push(channelName);
         chrome.storage.sync.set({ blockedChannels: list }, () => {
           settings.blockedChannels = list;
-          if (window.NoSlopCommunity) {
-            window.NoSlopCommunity.init(list, settings.remoteChannels, settings.allowedChannels);
-          }
+          initializeEngines();
           scanFeed();
         });
       }
@@ -638,10 +657,14 @@
   }
 
   async function processCard(rootCard) {
-    if (!rootCard || !rootCard.isConnected) return;
-    if (rootCard.dataset.noslopStatus === 'revealed' || rootCard.classList.contains('noslop-revealed')) return;
-
+    if (!settings.enabled || !rootCard || !rootCard.isConnected) return;
     const meta = extractMetadata(rootCard);
+    if (rootCard.dataset.noslopStatus === 'revealed' || rootCard.classList.contains('noslop-revealed')) {
+      if (rootCard.dataset.noslopRevealedVideo === (meta.videoId || meta.title)) return;
+      clearCardVisualState(rootCard);
+      rootCard.removeAttribute('data-noslop-status');
+      rootCard.removeAttribute('data-noslop-revealed-video');
+    }
     if (!meta.title || meta.title.length < 2) {
       retryHydratingCard(rootCard);
       return;
@@ -663,11 +686,10 @@
     processingCards.add(rootCard);
     const generationAtStart = evaluationGeneration;
 
-    const wasBlocked = rootCard.dataset.noslopStatus === 'blocked';
-    if (wasBlocked) {
-      clearCardVisualState(rootCard);
-      rootCard.removeAttribute('data-noslop-status');
-    }
+    const previousVideo = rootCard.dataset.noslopVideo;
+    const currentVideo = meta.videoId || meta.title;
+    if (previousVideo !== currentVideo) rootCard.removeAttribute('data-noslop-counted');
+    rootCard.dataset.noslopVideo = currentVideo;
     rootCard.dataset.noslopSig = sig;
 
     try {
@@ -699,6 +721,7 @@
       } else {
         clearCardVisualState(rootCard);
         rootCard.dataset.noslopStatus = 'clean';
+        rootCard.removeAttribute('data-noslop-reason');
         if (meta.channelName) {
           injectQuickBlockAction(rootCard, meta);
         }
@@ -725,6 +748,7 @@
       if (entry.isIntersecting) {
         const rootCard = entry.target;
         cardObserver.unobserve(rootCard);
+        rootCard.removeAttribute('data-noslop-observed');
         processCard(rootCard);
       }
     }
@@ -745,10 +769,11 @@
 
     const elements = document.querySelectorAll(CARD_SELECTOR_TEXT);
 
+    const roots = new Set();
     for (let i = 0; i < elements.length; i++) {
       const rootCard = findRootCard(elements[i]);
-      if (!rootCard || !rootCard.isConnected) continue;
-      if (rootCard.dataset.noslopStatus === 'revealed' || rootCard.classList.contains('noslop-revealed')) continue;
+      if (!rootCard || !rootCard.isConnected || roots.has(rootCard)) continue;
+      roots.add(rootCard);
 
       if (isElementInViewport(rootCard)) {
         processCard(rootCard);
@@ -770,6 +795,11 @@
       if (m.type === 'childList') {
         for (let j = 0; j < m.addedNodes.length; j++) {
           const n = m.addedNodes[j];
+          if (n.nodeType === 3 && m.target.closest?.(CARD_SELECTOR_TEXT) &&
+              !m.target.closest('.noslop-title-actions, .noslop-placeholder, .noslop-toast')) {
+            hasExternalNodes = true;
+            break;
+          }
           if (n.nodeType === 1) {
             const cl = n.classList;
             if (cl && (cl.contains('noslop-title-actions') || cl.contains('noslop-placeholder') || cl.contains('noslop-toast') || cl.contains('noslop-hidden') || cl.contains('noslop-revealed'))) {
